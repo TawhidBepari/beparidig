@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Product — 50 AI Prompts | BEPARI DIG</title>
+  <meta name="description" content="Product page for 50 AI Prompts to Grow Your Business in 2025. Learn more and buy."/>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css"/>
+  <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+  <script>
+    Paddle.Environment.set('sandbox');  
+    Paddle.Initialize({
+      token: "test_b258e068a5cc3ad7ce0ad32e93b"
+    });
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <div class="brand">BEPARI DIG</div>
+      <nav class="nav">
+        <a href="index.html">Home</a>
+        <a href="product.html">Product</a>
+        <a href="about.html">About</a>
+        <a href="contact.html">Contact</a>
+        <a href="terms.html">Terms</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="refund.html">Refund</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <article class="card">
+      <div style="display:grid; grid-template-columns: 300px 1fr; gap:22px; align-items:start;">
+        <div><img src="images/cover.png" alt="Cover" style="width:100%; border-radius:8px;"></div>
+        <div>
+          <h2>50 AI Prompts to Grow Your Business in 2025</h2>
+          <div class="price">$11.99</div>
+          <p class="lead">A compact, practical eBook with 50 tested prompts for marketing, content creation, email writing, sales outreach, product ideas and more.</p>
+          <h4 style="margin-top:16px">What's included</h4>
+          <ul>
+            <li>50 prompts grouped by use-case</li>
+            <li>Examples and prompt tuning tips</li>
+            <li>Editable prompt templates you can copy & paste</li>
+          </ul>
+          <p style="margin-top:18px;">
+            <button id="buy-now-product" class="cta">Buy Now — $11.99</button>
+          </p>
+          <h4 style="margin-top:18px">Delivery</h4>
+          <p class="small">After purchase, Paddle will email a secure download link. If your checkout redirects to our thank-you page, you will also find the download link there.</p>
+        </div>
+      </div>
+    </article>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <p>© 2025 BEPARI DIG — <a href="terms.html">Terms</a> • <a href="privacy.html">Privacy</a> • <a href="refund.html">Refund</a></p>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById('buy-now-product').addEventListener('click', function() {
+      Paddle.Checkout.open({
+        items: [{ priceId: "pri_01k5b696s0bvmk13jgtdzc3q3q", quantity: 1 }]
+      });
+    });
+  </script>
+</body>
+</html>
