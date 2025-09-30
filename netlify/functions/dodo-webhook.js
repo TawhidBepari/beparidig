@@ -1,33 +1,36 @@
-import { createClient } from '@supabase/supabase-js'
+const { createClient } = require('@supabase/supabase-js');
+const crypto = require('crypto');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
-)
+);
 
-export async function handler(event) {
+exports.handler = async function(event) {
   try {
-    // parse Dodo webhook payload
-    const body = JSON.parse(event.body)
+    if (event.httpMethod !== 'POST') {
+      return { statusCode: 405, body: 'Method Not Allowed' };
+    }
 
-    // Optional: verify webhook signature if Dodo provides one
-    // const secret = process.env.DODO_WEBHOOK_SECRET
-    // ...verify body
+    const body = JSON.parse(event.body || '{}');
+    const { email, product_slug, order_id, amount, affiliate_id } = body;
 
-    const { email, product_slug, order_id, amount } = body
+    if (!email || !product_slug || !order_id) {
+      return { statusCode: 400, body: 'Missing required fields' };
+    }
 
-    // 1. Get product info from Supabase
+    // find product
     const { data: product, error: prodErr } = await supabase
       .from('products')
       .select('*')
       .eq('slug', product_slug)
-      .single()
+      .single();
 
     if (prodErr || !product) {
-      return { statusCode: 400, body: 'Product not found' }
+      return { statusCode: 400, body: 'Product not found' };
     }
 
-    // 2. Insert purchase record
+    // insert purchase
     const { data: purchase, error: purchaseErr } = await supabase
       .from('purchases')
       .insert({
@@ -36,32 +39,41 @@ export async function handler(event) {
         provider_order_id: order_id,
         product_id: product.id,
         amount,
+        affiliate_id: affiliate_id || null,
         fulfilled: true
       })
       .select()
-      .single()
+      .single();
 
     if (purchaseErr) {
-      return { statusCode: 500, body: 'Failed to record purchase' }
+      console.error('purchaseErr', purchaseErr);
+      return { statusCode: 500, body: 'Failed to record purchase' };
     }
 
-    // 3. Generate download token
-    const token = crypto.randomUUID()
-    const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000) // expires in 24h
+    // create download token
+    const token = crypto.randomUUID();
+    const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-    await supabase
+    const { error: tokenErr } = await supabase
       .from('download_tokens')
       .insert({
         token,
         purchase_id: purchase.id,
         file_path: product.file_path,
         expires_at
-      })
+      });
 
-    // 4. Optional: send email to customer (we can add later)
+    if (tokenErr) {
+      console.error('tokenErr', tokenErr);
+      return { statusCode: 500, body: 'Failed to create token' };
+    }
 
-    return { statusCode: 200, body: 'Purchase recorded' }
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ message: 'Purchase recorded', token })
+    };
   } catch (err) {
-    return { statusCode: 500, body: 'Error processing webhook' }
+    console.error('handler error', err);
+    return { statusCode: 500, body: 'Error processing webhook' };
   }
-}
+};
