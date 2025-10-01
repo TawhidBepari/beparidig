@@ -3,16 +3,14 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title id="product-title">Product | BEPARI DIG</title> <!-- changed -->
-  <meta id="product-meta" name="description" content="Product page"/> <!-- changed -->
+  <title id="product-title">Product | BEPARI DIG</title>
+  <meta id="product-meta" name="description" content="Product page"/>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css"/>
   <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
   <script>
     Paddle.Environment.set('sandbox');  
-    Paddle.Initialize({
-      token: "test_b258e068a5cc3ad7ce0ad32e93b"
-    });
+    Paddle.Initialize({ token: "test_b258e068a5cc3ad7ce0ad32e93b" });
   </script>
 </head>
 <body>
@@ -34,17 +32,17 @@
   <main class="wrap">
     <article class="card">
       <div style="display:grid; grid-template-columns: 300px 1fr; gap:22px; align-items:start;">
-        <div><img id="product-image" src="images/cover.png" alt="Cover" style="width:100%; border-radius:8px;"></div> <!-- changed -->
+        <div><img id="product-image" src="images/cover.png" alt="Cover" style="width:100%; border-radius:8px;"></div>
         <div>
-          <h2 id="product-name">Loading...</h2> <!-- changed -->
-          <div class="price" id="product-price">$0.00</div> <!-- changed -->
-          <p class="lead" id="product-description">Loading description...</p> <!-- changed -->
+          <h2 id="product-name">Loading...</h2>
+          <div class="price" id="product-price">$0.00</div>
+          <p class="lead" id="product-description">Loading description...</p>
           <h4 style="margin-top:16px">What's included</h4>
-          <ul id="product-includes"> <!-- changed -->
+          <ul id="product-includes">
             <li>Loading...</li>
           </ul>
           <p style="margin-top:18px;">
-            <button id="buy-now-product" class="cta">Buy Now</button> <!-- changed -->
+            <button id="buy-now-product" class="cta">Buy Now</button>
           </p>
           <h4 style="margin-top:18px">Delivery</h4>
           <p class="small">After purchase, Paddle will email a secure download link. If your checkout redirects to our thank-you page, you will also find the download link there.</p>
@@ -62,20 +60,21 @@
   <script>
     async function loadProduct() {
       const urlParams = new URLSearchParams(window.location.search);
-      const slug = urlParams.get('slug'); // e.g. product.html?slug=50-ai-prompts
+      const slug = urlParams.get('slug'); // product.html?slug=50-ai-prompts
 
       if (!slug) {
         document.getElementById('product-name').innerText = "Product not found";
         return;
       }
 
-      // Fetch product details from Supabase
+      // Initialize Supabase client
       const { createClient } = window.supabase;
       const supabase = createClient(
-        "YOUR_SUPABASE_URL",  // replace with env variable later
-        "YOUR_SUPABASE_ANON_KEY"
+        "YOUR_SUPABASE_URL",       // replace with your Netlify env variable later
+        "YOUR_SUPABASE_ANON_KEY"   // replace with your Netlify env variable later
       );
 
+      // Fetch product by slug
       const { data: product, error } = await supabase
         .from('products')
         .select('*')
@@ -87,7 +86,7 @@
         return;
       }
 
-      // Update dynamic elements
+      // Update page dynamically
       document.getElementById('product-title').innerText = `${product.name} | BEPARI DIG`;
       document.getElementById('product-meta').setAttribute("content", product.description || "");
       document.getElementById('product-image').src = product.cover_image || "images/cover.png";
@@ -96,10 +95,10 @@
       document.getElementById('product-description').innerText = product.description || "";
       document.getElementById('buy-now-product').innerText = `Buy Now — $${product.price}`;
 
-      // Optional: fill includes list (if product has JSON list in DB)
+      // Fill includes
+      const ul = document.getElementById('product-includes');
+      ul.innerHTML = "";
       if (product.includes) {
-        const ul = document.getElementById('product-includes');
-        ul.innerHTML = "";
         product.includes.forEach(item => {
           const li = document.createElement('li');
           li.textContent = item;
@@ -107,15 +106,15 @@
         });
       }
 
-      // Hook up Paddle Checkout
-      document.getElementById('buy-now-product').addEventListener('click', function() {
+      // Paddle checkout
+      document.getElementById('buy-now-product').addEventListener('click', () => {
         Paddle.Checkout.open({
           items: [{ priceId: product.paddle_price_id, quantity: 1 }]
         });
       });
     }
 
-    // Load Supabase SDK
+    // Load Supabase SDK dynamically
     const supabaseScript = document.createElement("script");
     supabaseScript.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js";
     supabaseScript.onload = loadProduct;
