@@ -38,9 +38,7 @@
           <div class="price" id="product-price">$0.00</div>
           <p class="lead" id="product-description">Loading description...</p>
           <h4 style="margin-top:16px">What's included</h4>
-          <ul id="product-includes">
-            <li>Loading...</li>
-          </ul>
+          <ul id="product-includes"><li>Loading...</li></ul>
           <p style="margin-top:18px;">
             <button id="buy-now-product" class="cta">Buy Now</button>
           </p>
@@ -57,31 +55,58 @@
     </div>
   </footer>
 
-  <script>
-    async function loadProduct() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const slug = urlParams.get('slug'); // product.html?slug=50-ai-prompts
+  <!-- Supabase SDK -->
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
-      if (!slug) {
-        document.getElementById('product-name').innerText = "Product not found";
+    const supabase = createClient(
+      "YOUR_SUPABASE_URL",        // replace with your Netlify env variable later
+      "YOUR_SUPABASE_ANON_KEY"    // replace with your Netlify env variable later
+    );
+
+    // Parse URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const productSlug = urlParams.get('product');       // ?product=slug
+    const affiliateCode = urlParams.get('affiliate');   // ?affiliate=AFF123
+
+    async function loadProduct() {
+      let product;
+
+      if (affiliateCode) {
+        // Lookup product linked to affiliate
+        const { data: linkData } = await supabase
+          .from('affiliate_links')
+          .select('product_id')
+          .eq('link_code', affiliateCode)
+          .single();
+
+        if (!linkData) {
+          document.getElementById('product-name').innerText = "Invalid affiliate link";
+          return;
+        }
+
+        const { data } = await supabase
+          .from('products')
+          .select('*')
+          .eq('id', linkData.product_id)
+          .single();
+        product = data;
+
+      } else if (productSlug) {
+        // Normal product page
+        const { data } = await supabase
+          .from('products')
+          .select('*')
+          .eq('slug', productSlug)
+          .single();
+        product = data;
+
+      } else {
+        document.getElementById('product-name').innerText = "No product specified";
         return;
       }
 
-      // Initialize Supabase client
-      const { createClient } = window.supabase;
-      const supabase = createClient(
-        "YOUR_SUPABASE_URL",       // replace with your Netlify env variable later
-        "YOUR_SUPABASE_ANON_KEY"   // replace with your Netlify env variable later
-      );
-
-      // Fetch product by slug
-      const { data: product, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('slug', slug)
-        .single();
-
-      if (error || !product) {
+      if (!product) {
         document.getElementById('product-name').innerText = "Product not found";
         return;
       }
@@ -91,9 +116,8 @@
       document.getElementById('product-meta').setAttribute("content", product.description || "");
       document.getElementById('product-image').src = product.cover_image || "images/cover.png";
       document.getElementById('product-name').innerText = product.name;
-      document.getElementById('product-price').innerText = `$${product.price}`;
+      document.getElementById('product-price').innerText = `$${product.price.toFixed(2)}`;
       document.getElementById('product-description').innerText = product.description || "";
-      document.getElementById('buy-now-product').innerText = `Buy Now — $${product.price}`;
 
       // Fill includes
       const ul = document.getElementById('product-includes');
@@ -106,19 +130,17 @@
         });
       }
 
-      // Paddle checkout
-      document.getElementById('buy-now-product').addEventListener('click', () => {
+      // Paddle checkout button
+      document.getElementById('buy-now-product').onclick = () => {
         Paddle.Checkout.open({
-          items: [{ priceId: product.paddle_price_id, quantity: 1 }]
+          items: [{ priceId: product.paddle_price_id, quantity: 1 }],
+          // send affiliate code to your backend/checkout webhook
+          passthrough: JSON.stringify({ affiliate: affiliateCode || null })
         });
-      });
+      };
     }
 
-    // Load Supabase SDK dynamically
-    const supabaseScript = document.createElement("script");
-    supabaseScript.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js";
-    supabaseScript.onload = loadProduct;
-    document.body.appendChild(supabaseScript);
+    loadProduct();
   </script>
 </body>
 </html>
