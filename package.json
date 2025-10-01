@@ -3,5 +3,21 @@
   "version": "1.0.0",
   "dependencies": {
     "@supabase/supabase-js": "^2.0.0"
-  }
+  },
+  "main": "product.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TawhidBepari/beparidig.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/TawhidBepari/beparidig/issues"
+  },
+  "homepage": "https://github.com/TawhidBepari/beparidig#readme",
+  "description": ""
 }
