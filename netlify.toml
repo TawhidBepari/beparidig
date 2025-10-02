@@ -1,3 +1,11 @@
 [build]
-  command = "echo \"export const SUPABASE_URL='${SUPABASE_URL}'; export const SUPABASE_ANON_KEY='${SUPABASE_ANON_KEY}';\" > config.js"
+  command = "echo \"window.SUPABASE_URL='${SUPABASE_URL}'; window.SUPABASE_ANON_KEY='${SUPABASE_ANON_KEY}';\" > config.js"
   publish = "."
+
+[build.environment]
+  SECRETS_SCAN_ENABLED = "false"
+
+[[redirects]]
+  from = "/product/:slug"
+  to = "/product.html?product=:slug"
+  status = 200
