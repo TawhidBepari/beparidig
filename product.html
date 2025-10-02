@@ -12,8 +12,6 @@
     Paddle.Environment.set('sandbox');  
     Paddle.Initialize({ token: "test_b258e068a5cc3ad7ce0ad32e93b" });
   </script>
-  <!-- Load Supabase keys injected by Netlify build -->
-  <script src="/config.js"></script>
 </head>
 <body>
   <header class="site-header">
@@ -61,13 +59,16 @@
   <script type="module">
     import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
-    // Load Supabase credentials from config.js
-    const supabase = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+    // Use Netlify environment variables (set in site dashboard)
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
     // Parse URL parameters
     const urlParams = new URLSearchParams(window.location.search);
-    const productSlug = urlParams.get('product');       // ?product=slug
-    const affiliateCode = urlParams.get('affiliate');   // ?affiliate=AFF123
+    const productSlug = urlParams.get('slug') || urlParams.get('product'); // fallback
+    const affiliateCode = urlParams.get('affiliate');   // optional
 
     async function loadProduct() {
       let product;
