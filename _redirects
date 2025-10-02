@@ -1,0 +1,1 @@
+/product/:slug   /product.html?slug=:slug   200
