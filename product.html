@@ -7,11 +7,7 @@
   <meta id="product-meta" name="description" content="Product page"/>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css"/>
-  <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
-  <script>
-    Paddle.Environment.set('sandbox');  
-    Paddle.Initialize({ token: "test_b258e068a5cc3ad7ce0ad32e93b" });
-  </script>
+  <script src="https://cdn.dodo.so/sdk/dodo.js"></script>
 </head>
 <body>
   <header class="site-header">
@@ -38,12 +34,14 @@
           <div class="price" id="product-price">$0.00</div>
           <p class="lead" id="product-description">Loading description...</p>
           <h4 style="margin-top:16px">What's included</h4>
-          <ul id="product-includes"><li>Loading...</li></ul>
+          <ul id="product-includes">
+            <li>Loading...</li>
+          </ul>
           <p style="margin-top:18px;">
             <button id="buy-now-product" class="cta">Buy Now</button>
           </p>
           <h4 style="margin-top:18px">Delivery</h4>
-          <p class="small">After purchase, Paddle will email a secure download link. If your checkout redirects to our thank-you page, you will also find the download link there.</p>
+          <p class="small">After purchase, Dodo will email a secure download link.</p>
         </div>
       </div>
     </article>
@@ -55,92 +53,48 @@
     </div>
   </footer>
 
-  <!-- Supabase SDK -->
-  <script type="module">
-    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+  <script>
+    // Your product info
+    const PRODUCT = {
+      id: "pdt_aqbU9onYRBtcUY3Gk7Ixq",
+      name: "50 AI Prompts to Grow your Business",
+      price: 11.99,
+      description: "Unlock practical, ready-to-use prompts for marketing, content, email outreach, lead generation, and small-business automation. Bite-size, tested and built to save time.",
+      image: "images/cover.png",
+      includes: [
+        "50 ready-to-use AI prompts",
+        "Step-by-step implementation guide",
+        "Bonus tips for faster results"
+      ]
+    };
 
-    // Use Netlify environment variables (set in site dashboard)
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-    // Parse URL parameters
+    // Parse affiliate code from URL
     const urlParams = new URLSearchParams(window.location.search);
-    const productSlug = urlParams.get('slug') || urlParams.get('product'); // fallback
-    const affiliateCode = urlParams.get('affiliate');   // optional
+    const affiliateCode = urlParams.get('affiliate') || null;
 
-    async function loadProduct() {
-      let product;
+    // Load product info into page
+    document.getElementById('product-title').innerText = `${PRODUCT.name} | BEPARI DIG`;
+    document.getElementById('product-meta').setAttribute("content", PRODUCT.description);
+    document.getElementById('product-image').src = PRODUCT.image;
+    document.getElementById('product-name').innerText = PRODUCT.name;
+    document.getElementById('product-price').innerText = `$${PRODUCT.price.toFixed(2)}`;
+    document.getElementById('product-description').innerText = PRODUCT.description;
 
-      if (affiliateCode) {
-        // Lookup product linked to affiliate
-        const { data: linkData } = await supabase
-          .from('affiliate_links')
-          .select('product_id')
-          .eq('link_code', affiliateCode)
-          .single();
+    const ul = document.getElementById('product-includes');
+    ul.innerHTML = "";
+    PRODUCT.includes.forEach(item => {
+      const li = document.createElement('li');
+      li.textContent = item;
+      ul.appendChild(li);
+    });
 
-        if (!linkData) {
-          document.getElementById('product-name').innerText = "Invalid affiliate link";
-          return;
-        }
-
-        const { data } = await supabase
-          .from('products')
-          .select('*')
-          .eq('id', linkData.product_id)
-          .single();
-        product = data;
-
-      } else if (productSlug) {
-        // Normal product page
-        const { data } = await supabase
-          .from('products')
-          .select('*')
-          .eq('slug', productSlug)
-          .single();
-        product = data;
-
-      } else {
-        document.getElementById('product-name').innerText = "No product specified";
-        return;
-      }
-
-      if (!product) {
-        document.getElementById('product-name').innerText = "Product not found";
-        return;
-      }
-
-      // Update page dynamically
-      document.getElementById('product-title').innerText = `${product.name} | BEPARI DIG`;
-      document.getElementById('product-meta').setAttribute("content", product.description || "");
-      document.getElementById('product-image').src = product.cover_image || "images/cover.png";
-      document.getElementById('product-name').innerText = product.name;
-      document.getElementById('product-price').innerText = `$${product.price.toFixed(2)}`;
-      document.getElementById('product-description').innerText = product.description || "";
-
-      // Fill includes
-      const ul = document.getElementById('product-includes');
-      ul.innerHTML = "";
-      if (product.includes) {
-        product.includes.forEach(item => {
-          const li = document.createElement('li');
-          li.textContent = item;
-          ul.appendChild(li);
-        });
-      }
-
-      // Paddle checkout button
-      document.getElementById('buy-now-product').onclick = () => {
-        Paddle.Checkout.open({
-          items: [{ priceId: product.paddle_price_id, quantity: 1 }],
-          passthrough: JSON.stringify({ affiliate: affiliateCode || null })
-        });
-      };
-    }
-
-    loadProduct();
+    // Buy button opens Dodo checkout
+    document.getElementById('buy-now-product').onclick = () => {
+      Dodo.Checkout.open({
+        productId: PRODUCT.id,
+        affiliateCode: affiliateCode,  // track affiliate if exists
+      });
+    };
   </script>
 </body>
 </html>
