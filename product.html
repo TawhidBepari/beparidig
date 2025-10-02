@@ -60,20 +60,18 @@
     import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
     const supabase = createClient(
-      "YOUR_SUPABASE_URL",        // replace with your Netlify env variable later
-      "YOUR_SUPABASE_ANON_KEY"    // replace with your Netlify env variable later
+      "https://vtqynkbhlkpftmbfnxcr.supabase.co",
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ0cXlua2JobGtwZnRtYmZueGNyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzODA3MTcsImV4cCI6MjA3Mzk1NjcxN30.bpwUzrTkcR8-5AXN2rV5F9XQnQxDScgzBgFPym0dPQE"
     );
 
-    // Parse URL parameters
     const urlParams = new URLSearchParams(window.location.search);
-    const productSlug = urlParams.get('product');       // ?product=slug
-    const affiliateCode = urlParams.get('affiliate');   // ?affiliate=AFF123
+    const productSlug = urlParams.get('product');       // Example: product.html?product=50-ai-prompts
+    const affiliateCode = urlParams.get('affiliate');   // Optional: product.html?product=50-ai-prompts&affiliate=AFF123
 
     async function loadProduct() {
       let product;
 
       if (affiliateCode) {
-        // Lookup product linked to affiliate
         const { data: linkData } = await supabase
           .from('affiliate_links')
           .select('product_id')
@@ -93,7 +91,6 @@
         product = data;
 
       } else if (productSlug) {
-        // Normal product page
         const { data } = await supabase
           .from('products')
           .select('*')
@@ -111,7 +108,6 @@
         return;
       }
 
-      // Update page dynamically
       document.getElementById('product-title').innerText = `${product.name} | BEPARI DIG`;
       document.getElementById('product-meta').setAttribute("content", product.description || "");
       document.getElementById('product-image').src = product.cover_image || "images/cover.png";
@@ -119,22 +115,17 @@
       document.getElementById('product-price').innerText = `$${product.price.toFixed(2)}`;
       document.getElementById('product-description').innerText = product.description || "";
 
-      // Fill includes
       const ul = document.getElementById('product-includes');
       ul.innerHTML = "";
-      if (product.includes) {
-        product.includes.forEach(item => {
-          const li = document.createElement('li');
-          li.textContent = item;
-          ul.appendChild(li);
-        });
-      }
+      if (product.includes) product.includes.forEach(item => {
+        const li = document.createElement('li');
+        li.textContent = item;
+        ul.appendChild(li);
+      });
 
-      // Paddle checkout button
       document.getElementById('buy-now-product').onclick = () => {
         Paddle.Checkout.open({
           items: [{ priceId: product.paddle_price_id, quantity: 1 }],
-          // send affiliate code to your backend/checkout webhook
           passthrough: JSON.stringify({ affiliate: affiliateCode || null })
         });
       };
