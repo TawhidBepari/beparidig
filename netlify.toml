@@ -1,3 +1,3 @@
 [build]
-  publish = "public"
-  command = "echo \"export const SUPABASE_URL='${SUPABASE_URL}'; export const SUPABASE_ANON_KEY='${SUPABASE_ANON_KEY}';\" > public/config.js"
+  command = "echo \"export const SUPABASE_URL='${SUPABASE_URL}'; export const SUPABASE_ANON_KEY='${SUPABASE_ANON_KEY}';\" > config.js"
+  publish = "."
