@@ -12,6 +12,8 @@
     Paddle.Environment.set('sandbox');  
     Paddle.Initialize({ token: "test_b258e068a5cc3ad7ce0ad32e93b" });
   </script>
+  <!-- Load Supabase keys injected by Netlify build -->
+  <script src="/config.js"></script>
 </head>
 <body>
   <header class="site-header">
@@ -55,15 +57,12 @@
     </div>
   </footer>
 
-  <!-- Config (generated at build by Netlify) -->
-  <script type="module" src="/config.js"></script>
-
-  <!-- Supabase logic -->
+  <!-- Supabase SDK -->
   <script type="module">
-    import { SUPABASE_URL, SUPABASE_ANON_KEY } from '/config.js';
     import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // Load Supabase credentials from config.js
+    const supabase = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
     // Parse URL parameters
     const urlParams = new URLSearchParams(window.location.search);
