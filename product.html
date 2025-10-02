@@ -1,137 +1,80 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title id="product-title">Product | BEPARI DIG</title>
-  <meta id="product-meta" name="description" content="Product page"/>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css"/>
-  <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
-  <script>
-    Paddle.Environment.set('sandbox');  
-    Paddle.Initialize({ token: "test_b258e068a5cc3ad7ce0ad32e93b" });
-  </script>
-</head>
-<body>
-  <header class="site-header">
-    <div class="wrap header-inner">
-      <div class="brand">BEPARI DIG</div>
-      <nav class="nav">
-        <a href="index.html">Home</a>
-        <a href="product.html">Product</a>
-        <a href="about.html">About</a>
-        <a href="contact.html">Contact</a>
-        <a href="terms.html">Terms</a>
-        <a href="privacy.html">Privacy</a>
-        <a href="refund.html">Refund</a>
-      </nav>
-    </div>
-  </header>
+<!-- Supabase SDK -->
+<script type="module">
+  import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./config.js";
 
-  <main class="wrap">
-    <article class="card">
-      <div style="display:grid; grid-template-columns: 300px 1fr; gap:22px; align-items:start;">
-        <div><img id="product-image" src="images/cover.png" alt="Cover" style="width:100%; border-radius:8px;"></div>
-        <div>
-          <h2 id="product-name">Loading...</h2>
-          <div class="price" id="product-price">$0.00</div>
-          <p class="lead" id="product-description">Loading description...</p>
-          <h4 style="margin-top:16px">What's included</h4>
-          <ul id="product-includes"><li>Loading...</li></ul>
-          <p style="margin-top:18px;">
-            <button id="buy-now-product" class="cta">Buy Now</button>
-          </p>
-          <h4 style="margin-top:18px">Delivery</h4>
-          <p class="small">After purchase, Paddle will email a secure download link. If your checkout redirects to our thank-you page, you will also find the download link there.</p>
-        </div>
-      </div>
-    </article>
-  </main>
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  <footer class="footer">
-    <div class="wrap">
-      <p>© 2025 BEPARI DIG — <a href="terms.html">Terms</a> • <a href="privacy.html">Privacy</a> • <a href="refund.html">Refund</a></p>
-    </div>
-  </footer>
+  // Parse URL parameters
+  const urlParams = new URLSearchParams(window.location.search);
+  const productSlug = urlParams.get('product');       // ?product=slug
+  const affiliateCode = urlParams.get('affiliate');   // ?affiliate=AFF123
 
-  <!-- Supabase SDK -->
-  <script type="module">
-    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+  async function loadProduct() {
+    let product;
 
-    const supabase = createClient(
-      "https://vtqynkbhlkpftmbfnxcr.supabase.co",
-      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ0cXlua2JobGtwZnRtYmZueGNyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzODA3MTcsImV4cCI6MjA3Mzk1NjcxN30.bpwUzrTkcR8-5AXN2rV5F9XQnQxDScgzBgFPym0dPQE"
-    );
+    if (affiliateCode) {
+      const { data: linkData } = await supabase
+        .from('affiliate_links')
+        .select('product_id')
+        .eq('link_code', affiliateCode)
+        .single();
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const productSlug = urlParams.get('product');       // Example: product.html?product=50-ai-prompts
-    const affiliateCode = urlParams.get('affiliate');   // Optional: product.html?product=50-ai-prompts&affiliate=AFF123
-
-    async function loadProduct() {
-      let product;
-
-      if (affiliateCode) {
-        const { data: linkData } = await supabase
-          .from('affiliate_links')
-          .select('product_id')
-          .eq('link_code', affiliateCode)
-          .single();
-
-        if (!linkData) {
-          document.getElementById('product-name').innerText = "Invalid affiliate link";
-          return;
-        }
-
-        const { data } = await supabase
-          .from('products')
-          .select('*')
-          .eq('id', linkData.product_id)
-          .single();
-        product = data;
-
-      } else if (productSlug) {
-        const { data } = await supabase
-          .from('products')
-          .select('*')
-          .eq('slug', productSlug)
-          .single();
-        product = data;
-
-      } else {
-        document.getElementById('product-name').innerText = "No product specified";
+      if (!linkData) {
+        document.getElementById('product-name').innerText = "Invalid affiliate link";
         return;
       }
 
-      if (!product) {
-        document.getElementById('product-name').innerText = "Product not found";
-        return;
-      }
+      const { data } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', linkData.product_id)
+        .single();
+      product = data;
 
-      document.getElementById('product-title').innerText = `${product.name} | BEPARI DIG`;
-      document.getElementById('product-meta').setAttribute("content", product.description || "");
-      document.getElementById('product-image').src = product.cover_image || "images/cover.png";
-      document.getElementById('product-name').innerText = product.name;
-      document.getElementById('product-price').innerText = `$${product.price.toFixed(2)}`;
-      document.getElementById('product-description').innerText = product.description || "";
+    } else if (productSlug) {
+      const { data } = await supabase
+        .from('products')
+        .select('*')
+        .eq('slug', productSlug)
+        .single();
+      product = data;
 
-      const ul = document.getElementById('product-includes');
-      ul.innerHTML = "";
-      if (product.includes) product.includes.forEach(item => {
+    } else {
+      document.getElementById('product-name').innerText = "No product specified";
+      return;
+    }
+
+    if (!product) {
+      document.getElementById('product-name').innerText = "Product not found";
+      return;
+    }
+
+    // Update page
+    document.getElementById('product-title').innerText = `${product.name} | BEPARI DIG`;
+    document.getElementById('product-meta').setAttribute("content", product.description || "");
+    document.getElementById('product-image').src = product.cover_image || "images/cover.png";
+    document.getElementById('product-name').innerText = product.name;
+    document.getElementById('product-price').innerText = `$${product.price.toFixed(2)}`;
+    document.getElementById('product-description').innerText = product.description || "";
+
+    const ul = document.getElementById('product-includes');
+    ul.innerHTML = "";
+    if (product.includes) {
+      product.includes.forEach(item => {
         const li = document.createElement('li');
         li.textContent = item;
         ul.appendChild(li);
       });
-
-      document.getElementById('buy-now-product').onclick = () => {
-        Paddle.Checkout.open({
-          items: [{ priceId: product.paddle_price_id, quantity: 1 }],
-          passthrough: JSON.stringify({ affiliate: affiliateCode || null })
-        });
-      };
     }
 
-    loadProduct();
-  </script>
-</body>
-</html>
+    document.getElementById('buy-now-product').onclick = () => {
+      Paddle.Checkout.open({
+        items: [{ priceId: product.paddle_price_id, quantity: 1 }],
+        passthrough: JSON.stringify({ affiliate: affiliateCode || null })
+      });
+    };
+  }
+
+  loadProduct();
+</script>
