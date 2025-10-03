@@ -12,11 +12,31 @@
   <main class="wrap">
     <section class="card" style="text-align:center; padding:48px;">
       <h2>Thank you for your purchase</h2>
-      <p class="small" style="margin-top:12px;">Your order is complete. Paddle will email you a secure download link. If your checkout redirects here, you can also download your eBook below.</p>
-      <p style="margin-top:18px;"><a class="cta" href="downloads/AI-Prompt.pdf" target="_blank" rel="noopener">Download your eBook</a></p>
+      <p class="small" style="margin-top:12px;">Your order is complete. Paddle will email you a secure download link. If your checkout redirects here, your eBook will start downloading automatically.</p>
+      <p style="margin-top:18px;"><a id="manualDownload" class="cta" href="files/50-AI-Prompts.pdf" target="_blank" rel="noopener">Download your eBook</a></p>
       <p class="small" style="margin-top:18px;">If you have any trouble, contact support at <a href="mailto:tawhidbepari2005@gmail.com">tawhidbepari2005@gmail.com</a></p>
     </section>
   </main>
   <footer class="footer"><div class="wrap"><p class="small">© 2025 BEPARI DIG</p></div></footer>
+
+  <script>
+    // Automatically trigger PDF download
+    (function(){
+      const pdfUrl = "files/50-AI-Prompts.pdf"; // PDF path relative to site root
+
+      // Create temporary link element
+      const link = document.createElement('a');
+      link.href = pdfUrl;
+      link.download = '50-AI-Prompts.pdf';
+      link.style.display = 'none';
+      document.body.appendChild(link);
+
+      // Trigger download
+      link.click();
+
+      // Optional: remove the link element after download
+      document.body.removeChild(link);
+    })();
+  </script>
 </body>
 </html>
