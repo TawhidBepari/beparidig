@@ -65,6 +65,12 @@
       successUrl: "https://your-site.netlify.app/thank-you.html"
     });
   });
+
+  // Fallback: listen for checkout complete event
+  Paddle.Checkout.on('checkout.completed', function(data) {
+    // Redirect buyer manually after purchase completes
+    window.location.href = "https://your-site.netlify.app/thank-you.html";
+  });
 </script>
 </body>
 </html>
