@@ -1,65 +1,66 @@
 // netlify/functions/paddleWebhook.js
+
 import crypto from "crypto";
 
 export async function handler(event) {
-  // Verify Paddle sends a POST request
   if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: "Method not allowed" };
+    return {
+      statusCode: 405,
+      body: JSON.stringify({ message: "Method not allowed" }),
+    };
   }
 
   try {
-    // Parse the payload from Paddle
-    const data = JSON.parse(event.body);
+    const webhookSecret = process.env.PADDLE_WEBHOOK_SECRET;
+    const body = event.body;
 
-    // ✅ Verify the webhook signature (replace with your Paddle webhook secret)
-    const signature = data.signature;
-    delete data.signature;
-
-    const serialized = Object.keys(data)
-      .sort()
-      .map((key) => `${key}=${data[key]}`)
-      .join("&");
-
-    const hash = crypto
-      .createHmac("sha256", process.env.PADDLE_WEBHOOK_SECRET)
-      .update(serialized)
-      .digest("hex");
-
-    if (hash !== signature) {
-      console.error("Invalid signature");
-      return { statusCode: 403, body: "Invalid signature" };
+    // Paddle sends signature header
+    const signature = event.headers["paddle-signature"];
+    if (!signature) {
+      return { statusCode: 400, body: "Missing Paddle signature" };
     }
 
-    // Handle only successful payments
-    if (
-      data.alert_name === "payment_succeeded" ||
-      data.alert_name === "order.completed"
-    ) {
-      const buyerEmail = data.email;
-      const affiliate = data.affiliate; // if any
+    // Verify webhook authenticity
+    const hmac = crypto
+      .createHmac("sha256", webhookSecret)
+      .update(body)
+      .digest("hex");
 
-      // Generate a temporary signed link (placeholder)
-      // We'll implement this properly in the next step
-      const fileUrl = "https://beparidig.com/files/50-AI-Prompts.pdf";
-      const expiresAt = Date.now() + 60 * 60 * 1000; // 1 hour validity
+    if (hmac !== signature) {
+      return { statusCode: 401, body: "Invalid signature" };
+    }
 
-      // For now, just log it — later we’ll send the email or create a token
-      console.log("Delivering to:", buyerEmail, "Affiliate:", affiliate);
+    const payload = JSON.parse(body);
 
-      // Respond OK so Paddle knows it succeeded
+    // Check event type (only trigger on successful payments)
+    const eventType = payload.event_type || payload.eventType || payload.type;
+    if (eventType === "transaction.completed" || eventType === "transaction.paid") {
+      const customerEmail =
+        payload.data?.customer?.email || payload.data?.user_email || "unknown";
+
+      console.log(`✅ Verified Paddle payment for ${customerEmail}`);
+
+      // Here you can handle delivery logic, e.g. create a temporary download URL.
+      // For now we just return success so Paddle knows the webhook worked.
       return {
         statusCode: 200,
         body: JSON.stringify({
-          message: "Payment received",
-          download: fileUrl,
-          expiresAt,
+          success: true,
+          message: "Webhook received and verified",
         }),
       };
     }
 
-    return { statusCode: 200, body: "Ignored event" };
-  } catch (err) {
-    console.error(err);
-    return { statusCode: 500, body: "Server error" };
+    // Ignore other event types
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ ignored: true }),
+    };
+  } catch (error) {
+    console.error("Webhook error:", error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: "Internal Server Error" }),
+    };
   }
 }
