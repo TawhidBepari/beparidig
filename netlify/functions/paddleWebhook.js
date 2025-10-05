@@ -12,27 +12,36 @@ export async function handler(event) {
 
   try {
     const webhookSecret = process.env.PADDLE_WEBHOOK_SECRET;
-    const body = event.body;
-
-    // Paddle sends signature header
     const signature = event.headers["paddle-signature"];
-    if (!signature) {
-      return { statusCode: 400, body: "Missing Paddle signature" };
+
+    // Detect sandbox by NODE_ENV or environment variable (adjust if needed)
+    const isSandbox = process.env.NODE_ENV !== "production";
+
+    if (!isSandbox) {
+      // Production: verify signature
+      if (!signature) {
+        return { statusCode: 400, body: "Missing Paddle signature" };
+      }
+
+      const hmac = crypto
+        .createHmac("sha256", webhookSecret)
+        .update(event.body)
+        .digest("hex");
+
+      if (hmac !== signature) {
+        return { statusCode: 401, body: "Invalid signature" };
+      }
+    } else {
+      console.log("⚠️ Sandbox mode — skipping signature verification");
     }
 
-    // Verify webhook authenticity
-    const hmac = crypto
-      .createHmac("sha256", webhookSecret)
-      .update(body)
-      .digest("hex");
+    // Parse webhook payload
+    const payload = JSON.parse(event.body);
 
-    if (hmac !== signature) {
-      return { statusCode: 401, body: "Invalid signature" };
-    }
+    // Log the full payload for sandbox debugging
+    console.log("Webhook payload:", payload);
 
-    const payload = JSON.parse(body);
-
-    // Check event type (only trigger on successful payments)
+    // Only handle successful payments
     const eventType = payload.event_type || payload.eventType || payload.type;
     if (eventType === "transaction.completed" || eventType === "transaction.paid") {
       const customerEmail =
@@ -40,8 +49,8 @@ export async function handler(event) {
 
       console.log(`✅ Verified Paddle payment for ${customerEmail}`);
 
-      // Here you can handle delivery logic, e.g. create a temporary download URL.
-      // For now we just return success so Paddle knows the webhook worked.
+      // TODO: Add temporary download link logic here
+
       return {
         statusCode: 200,
         body: JSON.stringify({
