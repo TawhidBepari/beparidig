@@ -9,33 +9,62 @@
 </head>
 <body>
   <header class="site-header"><div class="wrap header-inner"><div class="brand">BEPARI DIG</div></div></header>
+
   <main class="wrap">
     <section class="card" style="text-align:center; padding:48px;">
       <h2>Thank you for your purchase</h2>
-      <p class="small" style="margin-top:12px;">Your order is complete. Paddle will email you a secure download link. If your checkout redirects here, your eBook will start downloading automatically.</p>
-      <p style="margin-top:18px;"><a id="manualDownload" class="cta" href="files/50-AI-Prompts.pdf" target="_blank" rel="noopener">Download your eBook</a></p>
-      <p class="small" style="margin-top:18px;">If you have any trouble, contact support at <a href="mailto:tawhidbepari2005@gmail.com">tawhidbepari2005@gmail.com</a></p>
+      <p class="small" style="margin-top:12px;">
+        Your order is complete. Paddle will email you a secure download link. If your checkout redirects here, your eBook will be available below.
+      </p>
+      <p style="margin-top:18px;" id="download-container">
+        <!-- Download button will be inserted here after token validation -->
+      </p>
+      <p class="small" style="margin-top:18px;">
+        If you have any trouble, contact support at <a href="mailto:tawhidbepari2005@gmail.com">tawhidbepari2005@gmail.com</a>
+      </p>
     </section>
   </main>
+
   <footer class="footer"><div class="wrap"><p class="small">© 2025 BEPARI DIG</p></div></footer>
 
   <script>
-    // Automatically trigger PDF download
-    (function(){
-      const pdfUrl = "files/50-AI-Prompts.pdf"; // PDF path relative to site root
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get("token");
 
-      // Create temporary link element
-      const link = document.createElement('a');
-      link.href = pdfUrl;
-      link.download = '50-AI-Prompts.pdf';
-      link.style.display = 'none';
-      document.body.appendChild(link);
+      const container = document.getElementById("download-container");
 
-      // Trigger download
-      link.click();
+      if (!token) {
+        container.innerHTML = "❌ Invalid download link.";
+        return;
+      }
 
-      // Optional: remove the link element after download
-      document.body.removeChild(link);
+      // Call validateToken function
+      fetch(`/.netlify/functions/validateToken?token=${token}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.valid) {
+            // Token is valid, show download button
+            const pdfUrl = "/downloads/AI-Prompt.pdf";
+
+            container.innerHTML = `<a id="manualDownload" class="cta" href="${pdfUrl}" target="_blank" rel="noopener">Download your eBook</a>`;
+
+            // Automatically trigger download
+            const link = document.createElement('a');
+            link.href = pdfUrl;
+            link.download = '50-AI-Prompts.pdf';
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          } else {
+            container.innerHTML = "❌ Your download link has expired or is invalid.";
+          }
+        })
+        .catch(err => {
+          console.error("Error validating token:", err);
+          container.innerHTML = "❌ Error validating download link. Please try again later.";
+        });
     })();
   </script>
 </body>
