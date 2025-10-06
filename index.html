@@ -1,54 +1,93 @@
-<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
-<script>
-  // change this to your actual client token (sandbox or live)
-  Paddle.Environment.set('sandbox');
-  const PADDLE_CLIENT_TOKEN = "test_b258e068a5cc3ad7ce0ad32e93b";
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>BEPARI DIG — 50 AI Prompts to Grow Your Business in 2025</title>
+  <meta name="description" content="50 ready-to-use AI prompts to grow your business in 2025."/>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css"/>
+  <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <div style="display:flex; flex-direction:column;">
+        <div class="brand">BEPARI DIG</div>
+        <div class="small" style="color:#dbeee8; margin-top:6px;">Smart digital products for entrepreneurs</div>
+      </div>
+      <nav class="nav">
+        <a href="index.html">Home</a>
+        <a href="product.html">Product</a>
+        <a href="about.html">About</a>
+        <a href="contact.html">Contact</a>
+        <a href="terms.html">Terms</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="refund.html">Refund</a>
+      </nav>
+    </div>
+  </header>
 
-  // the URL for your thank-you page (must match the actual file on your site)
-  const SUCCESS_URL = "https://beparidig.netlify.app/thank-you.html";
+  <main class="wrap">
+    <section class="hero" role="region" aria-label="Hero">
+      <div class="cover card" style="padding:14px;">
+        <img src="images/cover.png" alt="50 AI Prompts cover"/>
+      </div>
+      <div>
+        <h1>50 AI Prompts to Grow Your Business in 2025</h1>
+        <div class="price">$11.99</div>
+        <p class="lead">
+          Unlock practical, ready-to-use prompts for marketing, content, email outreach,
+          lead generation, and small-business automation. Bite-size, tested and built to save time.
+        </p>
+        <p style="margin-top:18px;">
+          <button id="buy-now-index" class="cta">Buy Now — Instant Download</button>
+          <a class="button-ghost" href="product.html" style="margin-left:12px;">Product Details</a>
+        </p>
+      </div>
+    </section>
+  </main>
 
-  // Initialize Paddle and add an event callback to force redirect on checkout completion
-  Paddle.Initialize({
-    token: PADDLE_CLIENT_TOKEN,
-    eventCallback: function(ev) {
+  <footer class="footer">
+    <div class="wrap">
+      <p>© 2025 BEPARI DIG — <a href="terms.html">Terms</a> • <a href="privacy.html">Privacy</a> • <a href="refund.html">Refund</a></p>
+      <p>Support: <a href="mailto:tawhidbepari2005@gmail.com">tawhidbepari2005@gmail.com</a></p>
+    </div>
+  </footer>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
       try {
-        // Paddle emits events with a `name` property e.g. "checkout.completed"
-        if (ev && ev.name === "checkout.completed") {
-          console.log("Paddle event checkout.completed:", ev);
+        // Initialize Paddle after DOM fully loads
+        Paddle.Environment.set('sandbox');
+        Paddle.Initialize({
+          token: "test_b258e068a5cc3ad7ce0ad32e93b"
+        });
 
-          // try a few places to get a checkout/txn id (Paddle shape varies)
-          const ptxn =
-            ev?.data?.checkout?.id ||
-            ev?.data?.id ||
-            ev?.checkout?.id ||
-            ev?.data?.transaction_id ||
-            ev?.transaction?.id ||
-            "";
-
-          // build redirect URL; append _ptxn if we found it (helps token lookup)
-          let url = SUCCESS_URL;
-          if (ptxn) {
-            url += (url.includes('?') ? '&' : '?') + '_ptxn=' + encodeURIComponent(ptxn);
-          }
-
-          // force redirect (fallback in case successUrl didn't)
-          window.location.href = url;
+        const buyBtn = document.getElementById('buy-now-index');
+        if (!buyBtn) {
+          console.error("❌ Buy button not found in DOM.");
+          return;
         }
-      } catch (e) {
-        console.error("eventCallback error:", e);
-        // still attempt the fallback redirect
-        // (do not append _ptxn if something errored)
-        // window.location.href = SUCCESS_URL;
-      }
-    }
-  });
 
-  // attach to your button
-  document.getElementById('buy-now-index').addEventListener('click', function() {
-    Paddle.Checkout.open({
-      items: [{ priceId: "pri_01k5b696s0bvmk13jgtdzc3q3q", quantity: 1 }],
-      successUrl: SUCCESS_URL
-      // you can add other settings here if needed
+        // Open Paddle checkout when clicked
+        buyBtn.addEventListener('click', () => {
+          Paddle.Checkout.open({
+            items: [{ priceId: "pri_01k5b696s0bvmk13jgtdzc3q3q", quantity: 1 }],
+            successUrl: "https://beparidig.netlify.app/thank-you.html"
+          });
+        });
+
+        // Optional fallback: manually redirect if Paddle event fires but no redirect occurs
+        Paddle.Checkout.on('checkout.completed', (data) => {
+          console.log("✅ Checkout completed:", data);
+          window.location.href = "https://beparidig.netlify.app/thank-you.html";
+        });
+
+      } catch (err) {
+        console.error("⚠️ Paddle initialization error:", err);
+      }
     });
-  });
-</script>
+  </script>
+</body>
+</html>
