@@ -3,69 +3,82 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Thank you — BEPARI DIG</title>
+  <title>Thank You — BEPARI DIG</title>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
-  <header class="site-header"><div class="wrap header-inner"><div class="brand">BEPARI DIG</div></div></header>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <div class="brand">BEPARI DIG</div>
+    </div>
+  </header>
 
   <main class="wrap">
-    <section class="card" style="text-align:center; padding:48px;">
-      <h2>Thank you for your purchase</h2>
-      <p class="small" style="margin-top:12px;">
-        Your order is complete. Paddle will email you a secure download link. If your checkout redirects here, your eBook will be available below.
-      </p>
-      <p style="margin-top:18px;" id="download-container">
-        <!-- Download button will be inserted here after token validation -->
-      </p>
-      <p class="small" style="margin-top:18px;">
-        If you have any trouble, contact support at <a href="mailto:tawhidbepari2005@gmail.com">tawhidbepari2005@gmail.com</a>
-      </p>
+    <section class="card" id="content" style="text-align:center; padding:48px;">
+      <h2>Validating your purchase...</h2>
+      <p class="small" style="margin-top:12px;">Please wait while we confirm your payment.</p>
     </section>
   </main>
 
-  <footer class="footer"><div class="wrap"><p class="small">© 2025 BEPARI DIG</p></div></footer>
+  <footer class="footer">
+    <div class="wrap">
+      <p class="small">© 2025 BEPARI DIG</p>
+    </div>
+  </footer>
 
   <script>
-    (function() {
-      const params = new URLSearchParams(window.location.search);
-      const token = params.get("token");
+  async function validateAndDownload() {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    const content = document.getElementById('content');
 
-      const container = document.getElementById("download-container");
+    if (!token) {
+      content.innerHTML = `
+        <h2>Missing Token</h2>
+        <p class="small">We couldn’t find your download link. Please check your email for details.</p>
+      `;
+      return;
+    }
 
-      if (!token) {
-        container.innerHTML = "❌ Invalid download link.";
-        return;
+    try {
+      const res = await fetch(`/.netlify/functions/validateToken?token=${token}`);
+      const data = await res.json();
+
+      if (data.success) {
+        content.innerHTML = `
+          <h2>Thank you for your purchase!</h2>
+          <p class="small" style="margin-top:12px;">Your eBook is ready for download.</p>
+          <p style="margin-top:18px;"><a id="manualDownload" class="cta" href="${data.file}" download>Download Now</a></p>
+          <p class="small" style="margin-top:18px;">If you have trouble, contact support at <a href="mailto:tawhidbepari2005@gmail.com">tawhidbepari2005@gmail.com</a></p>
+        `;
+
+        // Auto download after a short delay
+        setTimeout(() => {
+          const link = document.createElement('a');
+          link.href = data.file;
+          link.download = 'AI-Prompt.pdf';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }, 1500);
+      } else {
+        content.innerHTML = `
+          <h2>Download Unavailable</h2>
+          <p class="small">${data.message || "Your token is invalid or expired."}</p>
+          <p class="small" style="margin-top:18px;">Please contact support at <a href="mailto:tawhidbepari2005@gmail.com">tawhidbepari2005@gmail.com</a></p>
+        `;
       }
+    } catch (err) {
+      console.error(err);
+      content.innerHTML = `
+        <h2>Server Error</h2>
+        <p class="small">Something went wrong while verifying your purchase. Please try again later.</p>
+      `;
+    }
+  }
 
-      // Call validateToken function
-      fetch(`/.netlify/functions/validateToken?token=${token}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.valid) {
-            // Token is valid, show download button
-            const pdfUrl = "/downloads/AI-Prompt.pdf";
-
-            container.innerHTML = `<a id="manualDownload" class="cta" href="${pdfUrl}" target="_blank" rel="noopener">Download your eBook</a>`;
-
-            // Automatically trigger download
-            const link = document.createElement('a');
-            link.href = pdfUrl;
-            link.download = '50-AI-Prompts.pdf';
-            link.style.display = 'none';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-          } else {
-            container.innerHTML = "❌ Your download link has expired or is invalid.";
-          }
-        })
-        .catch(err => {
-          console.error("Error validating token:", err);
-          container.innerHTML = "❌ Error validating download link. Please try again later.";
-        });
-    })();
+  validateAndDownload();
   </script>
 </body>
 </html>
