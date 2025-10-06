@@ -62,14 +62,14 @@
   document.getElementById('buy-now-index').addEventListener('click', function() {
     Paddle.Checkout.open({
       items: [{ priceId: "pri_01k5b696s0bvmk13jgtdzc3q3q", quantity: 1 }],
-      successUrl: "https://your-site.netlify.app/thank-you.html"
+      successUrl: "https://beparidig.netlify.app/thank-you.html"
     });
   });
 
-  // Fallback: listen for checkout complete event
+  // Fallback: if Paddle doesn’t auto-redirect after checkout
   Paddle.Checkout.on('checkout.completed', function(data) {
-    // Redirect buyer manually after purchase completes
-    window.location.href = "https://your-site.netlify.app/thank-you.html";
+    console.log("✅ Checkout completed:", data);
+    window.location.href = "https://beparidig.netlify.app/thank-you.html";
   });
 </script>
 </body>
