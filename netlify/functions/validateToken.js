@@ -1,40 +1,74 @@
-import fs from "fs";
-import path from "path";
+// netlify/functions/validateToken.js
+import { createClient } from "@supabase/supabase-js";
 
-const TOKENS_FILE = path.resolve("./tokens/tokens.json");
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 export async function handler(event) {
   try {
-    const token = event.queryStringParameters?.token;
+    const { token } = event.queryStringParameters || {};
 
     if (!token) {
-      return { statusCode: 400, body: JSON.stringify({ valid: false }) };
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ success: false, message: "Missing token" }),
+      };
     }
 
-    // Read existing tokens
-    let tokens = {};
-    if (fs.existsSync(TOKENS_FILE)) {
-      tokens = JSON.parse(fs.readFileSync(TOKENS_FILE));
+    // Check token in Supabase
+    const { data, error } = await supabase
+      .from("download_tokens")
+      .select("*")
+      .eq("token", token)
+      .single();
+
+    if (error || !data) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ success: false, message: "Invalid token" }),
+      };
     }
 
-    const expiry = tokens[token];
-
-    if (!expiry) {
-      // Token does not exist
-      return { statusCode: 200, body: JSON.stringify({ valid: false }) };
+    // Validate expiry
+    const now = new Date();
+    const expiresAt = new Date(data.expires_at);
+    if (now > expiresAt) {
+      return {
+        statusCode: 410,
+        body: JSON.stringify({ success: false, message: "Token expired" }),
+      };
     }
 
-    if (Date.now() > expiry) {
-      // Token expired — remove it
-      delete tokens[token];
-      fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens));
-      return { statusCode: 200, body: JSON.stringify({ valid: false }) };
+    if (data.used) {
+      return {
+        statusCode: 403,
+        body: JSON.stringify({ success: false, message: "Token already used" }),
+      };
     }
 
-    // Token is valid
-    return { statusCode: 200, body: JSON.stringify({ valid: true }) };
+    // Mark token as used
+    await supabase
+      .from("download_tokens")
+      .update({ used: true })
+      .eq("token", token);
+
+    // Return secure file URL (you can later serve from S3 or Supabase Storage)
+    const fileUrl = `https://beparidig.netlify.app/downloads/AI-Prompt.pdf`;
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        success: true,
+        message: "Token valid",
+        file: fileUrl,
+      }),
+    };
   } catch (err) {
-    console.error("Error in validateToken:", err);
-    return { statusCode: 500, body: JSON.stringify({ valid: false }) };
+    console.error("validateToken error:", err);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ success: false, message: "Server error" }),
+    };
   }
 }
