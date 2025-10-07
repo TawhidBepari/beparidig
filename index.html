@@ -7,6 +7,8 @@
   <meta name="description" content="50 ready-to-use AI prompts to grow your business in 2025."/>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css"/>
+
+  <!-- Paddle SDK -->
   <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
 </head>
 <body>
@@ -37,8 +39,8 @@
         <h1>50 AI Prompts to Grow Your Business in 2025</h1>
         <div class="price">$11.99</div>
         <p class="lead">
-          Unlock practical, ready-to-use prompts for marketing, content, email outreach,
-          lead generation, and small-business automation. Bite-size, tested and built to save time.
+          Unlock practical, ready-to-use prompts for marketing, content, email outreach, lead generation, and small-business automation.
+          Bite-size, tested and built to save time.
         </p>
         <p style="margin-top:18px;">
           <button id="buy-now-index" class="cta">Buy Now — Instant Download</button>
@@ -55,37 +57,33 @@
     </div>
   </footer>
 
+  <!-- Paddle Checkout Script -->
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       try {
-        // Initialize Paddle after DOM fully loads
+        // Initialize Paddle in Sandbox mode
         Paddle.Environment.set('sandbox');
         Paddle.Initialize({
           token: "test_b258e068a5cc3ad7ce0ad32e93b"
         });
 
+        // Handle Buy Now button
         const buyBtn = document.getElementById('buy-now-index');
         if (!buyBtn) {
-          console.error("❌ Buy button not found in DOM.");
+          console.error("❌ Buy button not found.");
           return;
         }
 
-        // Open Paddle checkout when clicked
         buyBtn.addEventListener('click', () => {
           Paddle.Checkout.open({
             items: [{ priceId: "pri_01k5b696s0bvmk13jgtdzc3q3q", quantity: 1 }],
-            successUrl: "https://beparidig.netlify.app/thank-you.html"
+            successUrl: "https://beparidig.netlify.app/thank-you.html",
+            displayMode: "redirect" // ✅ full-page checkout with guaranteed redirect
           });
         });
 
-        // Optional fallback: manually redirect if Paddle event fires but no redirect occurs
-        Paddle.Checkout.on('checkout.completed', (data) => {
-          console.log("✅ Checkout completed:", data);
-          window.location.href = "https://beparidig.netlify.app/thank-you.html";
-        });
-
       } catch (err) {
-        console.error("⚠️ Paddle initialization error:", err);
+        console.error("⚠️ Paddle initialization failed:", err);
       }
     });
   </script>
