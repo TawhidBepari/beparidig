@@ -58,22 +58,37 @@
   </footer>
 
   <!-- Paddle Checkout Script -->
-  <!-- Paddle SDK -->
-<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
-<script>
-  // 1️⃣ Initialize Paddle (sandbox for testing)
-  Paddle.Environment.set("sandbox"); // change to "production" when live
-  Paddle.Initialize({
-    token: "test_b258e068a5cc3ad7ce0ad32e93b"
-  });
+  <script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // Wait for Paddle SDK to load
+    function initPaddle() {
+      if (typeof Paddle === "undefined") {
+        console.log("Waiting for Paddle to load...");
+        return setTimeout(initPaddle, 100);
+      }
 
-  // 2️⃣ Handle Buy Now button
-  document.getElementById("buy-now-index").addEventListener("click", function () {
-    Paddle.Checkout.open({
-      items: [{ priceId: "pri_01k5b696s0bvmk13jgtdzc3q3q", quantity: 1 }],
-      displayMode: "redirect", // ensures full-page checkout
-      successUrl: "https://beparidig.netlify.app/thank-you.html"
-    });
+      console.log("✅ Paddle loaded, initializing...");
+
+      // 1. Initialize Paddle
+      Paddle.Environment.set("sandbox");
+      Paddle.Initialize({
+        token: "test_b258e068a5cc3ad7ce0ad32e93b"
+      });
+
+      // 2. Handle Buy Now button
+      const buyNow = document.getElementById("buy-now-index");
+      if (buyNow) {
+        buyNow.addEventListener("click", function () {
+          Paddle.Checkout.open({
+            items: [{ priceId: "pri_01k5b696s0bvmk13jgtdzc3q3q", quantity: 1 }],
+            displayMode: "redirect", // full-page redirect mode
+            successUrl: "https://beparidig.netlify.app/thank-you.html",
+          });
+        });
+      }
+    }
+
+    initPaddle();
   });
 </script>
 </body>
