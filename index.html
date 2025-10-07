@@ -59,33 +59,30 @@
 
   <!-- Paddle Checkout Script -->
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      try {
-        // Initialize Paddle in Sandbox mode
-        Paddle.Environment.set('sandbox');
-        Paddle.Initialize({
-          token: "test_b258e068a5cc3ad7ce0ad32e93b"
-        });
+  // --- 1. Initialize Paddle in Sandbox ---
+  Paddle.Environment.set("sandbox"); // change to "production" later when live
+  Paddle.Initialize({
+    token: "test_b258e068a5cc3ad7ce0ad32e93b"
+  });
 
-        // Handle Buy Now button
-        const buyBtn = document.getElementById('buy-now-index');
-        if (!buyBtn) {
-          console.error("❌ Buy button not found.");
-          return;
-        }
-
-        buyBtn.addEventListener('click', () => {
-          Paddle.Checkout.open({
-            items: [{ priceId: "pri_01k5b696s0bvmk13jgtdzc3q3q", quantity: 1 }],
-            successUrl: "https://beparidig.netlify.app/thank-you.html",
-            displayMode: "redirect" // ✅ full-page checkout with guaranteed redirect
-          });
-        });
-
-      } catch (err) {
-        console.error("⚠️ Paddle initialization failed:", err);
-      }
+  // --- 2. Handle Buy Now button ---
+  document.getElementById("buy-now-index").addEventListener("click", function () {
+    Paddle.Checkout.open({
+      items: [{ priceId: "pri_01k5b696s0bvmk13jgtdzc3q3q", quantity: 1 }],
+      displayMode: "redirect", // ✅ ensures full-page checkout and redirect after success
+      successUrl: "https://beparidig.netlify.app/thank-you.html", // where user lands post-payment
+      customer: {
+        email: "", // optional: can prefill if you have an email field later
+      },
     });
-  </script>
+  });
+
+  // --- 3. Safety Fallback (optional) ---
+  // If Paddle somehow doesn’t redirect automatically, this ensures a redirect after a successful event.
+  Paddle.Checkout.on("checkout.completed", function (eventData) {
+    console.log("✅ Paddle checkout completed:", eventData);
+    window.location.href = "https://beparidig.netlify.app/thank-you.html";
+  });
+</script>
 </body>
 </html>
