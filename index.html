@@ -59,29 +59,42 @@
 
   <!-- Paddle Checkout Script -->
   <script>
-  // --- 1. Initialize Paddle in Sandbox ---
-  Paddle.Environment.set("sandbox"); // change to "production" later when live
-  Paddle.Initialize({
-    token: "test_b258e068a5cc3ad7ce0ad32e93b"
-  });
+  document.addEventListener("DOMContentLoaded", function () {
+    // Wait for Paddle SDK to actually load
+    function initPaddle() {
+      if (typeof Paddle === "undefined") {
+        console.log("Waiting for Paddle to load...");
+        return setTimeout(initPaddle, 100);
+      }
 
-  // --- 2. Handle Buy Now button ---
-  document.getElementById("buy-now-index").addEventListener("click", function () {
-    Paddle.Checkout.open({
-      items: [{ priceId: "pri_01k5b696s0bvmk13jgtdzc3q3q", quantity: 1 }],
-      displayMode: "redirect", // ✅ ensures full-page checkout and redirect after success
-      successUrl: "https://beparidig.netlify.app/thank-you.html", // where user lands post-payment
-      customer: {
-        email: "", // optional: can prefill if you have an email field later
-      },
-    });
-  });
+      console.log("✅ Paddle loaded, initializing...");
 
-  // --- 3. Safety Fallback (optional) ---
-  // If Paddle somehow doesn’t redirect automatically, this ensures a redirect after a successful event.
-  Paddle.Checkout.on("checkout.completed", function (eventData) {
-    console.log("✅ Paddle checkout completed:", eventData);
-    window.location.href = "https://beparidig.netlify.app/thank-you.html";
+      // 1. Initialize Paddle
+      Paddle.Environment.set("sandbox");
+      Paddle.Initialize({
+        token: "test_b258e068a5cc3ad7ce0ad32e93b"
+      });
+
+      // 2. Handle Buy Now button
+      const buyNow = document.getElementById("buy-now-index");
+      if (buyNow) {
+        buyNow.addEventListener("click", function () {
+          Paddle.Checkout.open({
+            items: [{ priceId: "pri_01k5b696s0bvmk13jgtdzc3q3q", quantity: 1 }],
+            displayMode: "redirect",
+            successUrl: "https://beparidig.netlify.app/thank-you.html",
+          });
+        });
+      }
+
+      // 3. Safety fallback
+      Paddle.Checkout.on("checkout.completed", function (eventData) {
+        console.log("✅ Checkout completed:", eventData);
+        window.location.href = "https://beparidig.netlify.app/thank-you.html";
+      });
+    }
+
+    initPaddle();
   });
 </script>
 </body>
