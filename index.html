@@ -60,7 +60,7 @@
   <!-- Paddle Checkout Script -->
   <script>
   document.addEventListener("DOMContentLoaded", function () {
-    // Wait for Paddle SDK to actually load
+    // Wait for Paddle SDK to load
     function initPaddle() {
       if (typeof Paddle === "undefined") {
         console.log("Waiting for Paddle to load...");
@@ -81,17 +81,11 @@
         buyNow.addEventListener("click", function () {
           Paddle.Checkout.open({
             items: [{ priceId: "pri_01k5b696s0bvmk13jgtdzc3q3q", quantity: 1 }],
-            displayMode: "redirect",
+            displayMode: "redirect", // full-page redirect mode
             successUrl: "https://beparidig.netlify.app/thank-you.html",
           });
         });
       }
-
-      // 3. Safety fallback
-      Paddle.Checkout.on("checkout.completed", function (eventData) {
-        console.log("✅ Checkout completed:", eventData);
-        window.location.href = "https://beparidig.netlify.app/thank-you.html";
-      });
     }
 
     initPaddle();
