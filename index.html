@@ -7,9 +7,6 @@
   <meta name="description" content="50 ready-to-use AI prompts to grow your business in 2025."/>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css"/>
-
-  <!-- Paddle SDK -->
-  <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
 </head>
 <body>
   <header class="site-header">
@@ -52,46 +49,21 @@
 
   <footer class="footer">
     <div class="wrap">
-      <p>© 2025 BEPARI DIG — 
-        <a href="terms.html">Terms</a> • 
-        <a href="privacy.html">Privacy</a> • 
-        <a href="refund.html">Refund</a>
-      </p>
+      <p>© 2025 BEPARI DIG — <a href="terms.html">Terms</a> • <a href="privacy.html">Privacy</a> • <a href="refund.html">Refund</a></p>
       <p>Support: <a href="mailto:tawhidbepari2005@gmail.com">tawhidbepari2005@gmail.com</a></p>
     </div>
   </footer>
 
-  <!-- Paddle Checkout Script -->
+  <!-- Paddle Hosted Checkout Redirect -->
   <script>
     document.addEventListener("DOMContentLoaded", function () {
-      function initPaddle() {
-        if (typeof Paddle === "undefined") {
-          console.log("⏳ Waiting for Paddle to load...");
-          return setTimeout(initPaddle, 100);
-        }
-
-        console.log("✅ Paddle loaded, initializing...");
-
-        // Initialize Paddle in sandbox mode
-        Paddle.Environment.set("sandbox");
-        Paddle.Initialize({
-          token: "test_b258e068a5cc3ad7ce0ad32e93b"
+      const buyNow = document.getElementById("buy-now-index");
+      if (buyNow) {
+        buyNow.addEventListener("click", function () {
+          // ✅ Redirect directly to your Paddle hosted checkout link
+          window.location.href = "https://sandbox-pay.paddle.io/hsc_01k550t40wvzssnweh7nm164e9_z8yn58g9yfc9bn0k7hbzt7n8v4c8aqmj";
         });
-
-        // Attach event to Buy Now button
-        const buyNow = document.getElementById("buy-now-index");
-        if (buyNow) {
-          buyNow.addEventListener("click", function () {
-            Paddle.Checkout.open({
-              items: [{ priceId: "pri_01k5b696s0bvmk13jgtdzc3q3q", quantity: 1 }],
-              displayMode: "redirect", // full-page mode
-              successUrl: "https://beparidig.netlify.app/thank-you.html"
-            });
-          });
-        }
       }
-
-      initPaddle();
     });
   </script>
 </body>
