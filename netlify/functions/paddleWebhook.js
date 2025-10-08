@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
-import fetch from 'node-fetch';
 
 export async function handler(event) {
   console.log("🔥 Paddle webhook triggered");
