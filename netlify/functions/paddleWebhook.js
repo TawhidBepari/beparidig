@@ -23,8 +23,8 @@ export async function handler(event) {
 
     const data = body.data;
     const purchaseId = data.id;
-    const buyerEmail = data.customer?.email ?? null;
-
+    const buyerEmail = data.customer?.email || data.customer_email || null;
+    
     console.log("💰 Purchase ID:", purchaseId);
     console.log("📧 Buyer Email:", buyerEmail);
 
