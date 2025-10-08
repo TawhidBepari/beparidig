@@ -6,79 +6,104 @@
   <title>Thank You — BEPARI DIG</title>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css"/>
+  <style>
+    /* Small inline tweaks for clarity */
+    .small { color:#666; font-size:0.95rem; }
+    .cta { background:#007b55; color:#fff; padding:10px 18px; border-radius:6px; text-decoration:none; display:inline-block; }
+    .muted { color:#777; font-size:0.9rem; }
+  </style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="wrap header-inner">
-      <div class="brand">BEPARI DIG</div>
-    </div>
-  </header>
-
+  <header class="site-header"><div class="wrap header-inner"><div class="brand">BEPARI DIG</div></div></header>
   <main class="wrap">
     <section class="card" id="content" style="text-align:center; padding:48px;">
-      <h2>Validating your purchase...</h2>
-      <p class="small" style="margin-top:12px;">Please wait while we confirm your payment.</p>
+      <h2>Validating your purchase…</h2>
+      <p class="small" id="sub">Please wait while we confirm your payment and prepare the download.</p>
+      <div id="spinner" style="margin-top:18px;">⏳ Preparing your download…</div>
     </section>
   </main>
-
-  <footer class="footer">
-    <div class="wrap">
-      <p class="small">© 2025 BEPARI DIG</p>
-    </div>
-  </footer>
+  <footer class="footer"><div class="wrap"><p class="small">© 2025 BEPARI DIG</p></div></footer>
 
   <script>
-  async function validateAndDownload() {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    const content = document.getElementById('content');
+    (async function() {
+      const content = document.getElementById('content');
+      const params = new URLSearchParams(window.location.search);
 
-    if (!token) {
-      content.innerHTML = `
-        <h2>Missing Token</h2>
-        <p class="small">We couldn’t find your download link. Please check your email for details.</p>
-      `;
-      return;
-    }
+      // Try common Paddle query params
+      const txn = params.get('_ptxn') || params.get('txn') || params.get('purchase_id') 
+                || params.get('checkout_id') || params.get('transaction_id');
 
-    try {
-      const res = await fetch(`/.netlify/functions/validateToken?token=${token}`);
-      const data = await res.json();
+      function showMessage(title, html) {
+        content.innerHTML = `<h2>${title}</h2><p class="small">${html}</p>`;
+      }
 
-      if (data.success) {
+      if (!txn) {
+        showMessage('Missing purchase identifier', 'We couldn’t detect the purchase ID in the URL. If you just completed checkout, wait 10–30 seconds and refresh this page. If the download still does not appear, contact support at <a href="mailto:tawhidbepari2005@gmail.com">tawhidbepari2005@gmail.com</a>.');
+        return;
+      }
+
+      // Query your function to get the token for this txn
+      try {
+        const res = await fetch(`/.netlify/functions/getTokenByTxn?txn=${encodeURIComponent(txn)}`);
+        const json = await res.json();
+
+        if (!json.success) {
+          // Not ready or no token
+          if (res.status === 404) {
+            showMessage('Preparing your download', 'We are preparing your download. Please wait a few seconds and refresh this page. If it still doesn’t appear, contact support.');
+            return;
+          }
+          if (res.status === 410) {
+            showMessage('Download no longer available', 'This download link has expired or was already used. Please contact support if you need help.');
+            return;
+          }
+          showMessage('Unable to prepare download', json.message || 'Unexpected error. Please contact support.');
+          return;
+        }
+
+        const token = json.token;
+        const expiresAt = new Date(json.expires_at);
+        const expiryHuman = expiresAt.toLocaleString();
+
+        // Show professional download area
         content.innerHTML = `
           <h2>Thank you for your purchase!</h2>
-          <p class="small" style="margin-top:12px;">Your eBook is ready for download.</p>
-          <p style="margin-top:18px;"><a id="manualDownload" class="cta" href="${data.file}" download>Download Now</a></p>
-          <p class="small" style="margin-top:18px;">If you have trouble, contact support at <a href="mailto:tawhidbepari2005@gmail.com">tawhidbepari2005@gmail.com</a></p>
+          <p class="muted">Your download is ready. Click the button below to download your eBook.</p>
+          <p style="margin-top:18px;">
+            <button id="downloadBtn" class="cta">Access your eBook</button>
+          </p>
+          <p class="small" style="margin-top:12px;">This link will expire at <strong>${expiryHuman}</strong> (12 hours after purchase).</p>
+          <p class="small" style="margin-top:8px;">If you have trouble, contact support at <a href="mailto:tawhidbepari2005@gmail.com">tawhidbepari2005@gmail.com</a>.</p>
         `;
 
-        // Auto download after a short delay
-        setTimeout(() => {
-          const link = document.createElement('a');
-          link.href = data.file;
-          link.download = 'AI-Prompt.pdf';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        }, 1500);
-      } else {
-        content.innerHTML = `
-          <h2>Download Unavailable</h2>
-          <p class="small">${data.message || "Your token is invalid or expired."}</p>
-          <p class="small" style="margin-top:18px;">Please contact support at <a href="mailto:tawhidbepari2005@gmail.com">tawhidbepari2005@gmail.com</a></p>
-        `;
+        document.getElementById('downloadBtn').addEventListener('click', async function () {
+          this.disabled = true;
+          this.textContent = 'Preparing download...';
+
+          const v = await fetch(`/.netlify/functions/validateToken?token=${encodeURIComponent(token)}`);
+          const vjson = await v.json();
+
+          if (vjson.success && vjson.file) {
+            // Trigger download
+            const link = document.createElement('a');
+            link.href = vjson.file;
+            link.download = ''; // let browser pick filename
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            this.textContent = 'Download started';
+          } else {
+            this.disabled = false;
+            this.textContent = 'Access your eBook';
+            alert(vjson.message || 'Could not start download. Please contact support.');
+          }
+        });
+
+      } catch (err) {
+        console.error(err);
+        showMessage('Server error', 'We could not reach the download service. Please try again in a minute or contact support.');
       }
-    } catch (err) {
-      console.error(err);
-      content.innerHTML = `
-        <h2>Server Error</h2>
-        <p class="small">Something went wrong while verifying your purchase. Please try again later.</p>
-      `;
-    }
-  }
-
-  validateAndDownload();
+    })();
   </script>
 </body>
 </html>
