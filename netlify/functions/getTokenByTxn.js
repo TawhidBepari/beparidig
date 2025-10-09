@@ -12,10 +12,23 @@ export async function handler(event) {
       return { statusCode: 405, body: 'Method not allowed' };
     }
 
-    const txn = (event.queryStringParameters && event.queryStringParameters.txn) || null;
+    // ✅ Accept multiple possible query param names for safety
+    const params = event.queryStringParameters || {};
+    const txn =
+      params.txn ||
+      params.transaction_id ||
+      params.purchase_id ||
+      params.checkout_id ||
+      null;
+
     if (!txn) {
-      return { statusCode: 400, body: JSON.stringify({ success: false, message: 'Missing txn param' }) };
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ success: false, message: 'Missing transaction ID' }),
+      };
     }
+
+    console.log('🔍 Looking up token for purchase_id:', txn);
 
     const { data, error } = await supabase
       .from('download_tokens')
@@ -26,35 +39,66 @@ export async function handler(event) {
       .maybeSingle();
 
     if (error) {
-      console.error('Supabase select error:', error);
-      return { statusCode: 500, body: JSON.stringify({ success: false, message: 'DB error' }) };
+      console.error('❌ Supabase select error:', error);
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ success: false, message: 'Database query failed' }),
+      };
     }
 
     if (!data) {
-      return { statusCode: 404, body: JSON.stringify({ success: false, message: 'No token found' }) };
+      return {
+        statusCode: 404,
+        body: JSON.stringify({
+          success: false,
+          message:
+            'No download available yet. Please wait a few seconds and refresh this page.',
+        }),
+      };
     }
 
-    // if expired or used, return that info (front-end will show helpful message)
+    // ✅ Check expiry and usage
     const now = new Date();
     const expiresAt = new Date(data.expires_at);
+
     if (data.used) {
-      return { statusCode: 410, body: JSON.stringify({ success: false, message: 'Token already used' }) };
-    }
-    if (now > expiresAt) {
-      return { statusCode: 410, body: JSON.stringify({ success: false, message: 'Token expired' }) };
+      return {
+        statusCode: 410,
+        body: JSON.stringify({
+          success: false,
+          message: 'Download link already used. Please contact support if needed.',
+        }),
+      };
     }
 
+    if (now > expiresAt) {
+      return {
+        statusCode: 410,
+        body: JSON.stringify({
+          success: false,
+          message: 'This download link has expired. Please contact support.',
+        }),
+      };
+    }
+
+    // ✅ Return valid token
     return {
       statusCode: 200,
       body: JSON.stringify({
         success: true,
         token: data.token,
         file_path: data.file_path,
-        expires_at: data.expires_at
-      })
+        expires_at: data.expires_at,
+      }),
     };
   } catch (err) {
-    console.error('getTokenByTxn error:', err);
-    return { statusCode: 500, body: JSON.stringify({ success: false, message: 'Server error' }) };
+    console.error('❌ getTokenByTxn error:', err);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({
+        success: false,
+        message: 'Server error while validating purchase.',
+      }),
+    };
   }
 }
