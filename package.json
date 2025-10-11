@@ -2,6 +2,7 @@
   "name": "beparidig",
   "version": "1.0.0",
   "dependencies": {
+    "@paddle/paddle-node-sdk": "^3.3.0",
     "@supabase/supabase-js": "^2.58.0"
   },
   "main": "product.js",
