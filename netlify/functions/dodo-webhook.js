@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
-// ✅ Initialize Supabase client
+// ✅ Initialize Supabase
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
@@ -9,50 +9,50 @@ const supabase = createClient(
 
 export async function handler(event) {
   try {
+    // ✅ Only accept POST requests
     if (event.httpMethod !== 'POST') {
       return { statusCode: 405, body: 'Method Not Allowed' };
     }
 
-    // ✅ Log header + method for debugging
-    console.log('🔔 Incoming Dodo webhook:', {
-      method: event.httpMethod,
-      headers: event.headers,
-    });
-
-    // ✅ Optional: Verify Dodo webhook signature (if Dodo provides it)
+    // ✅ Verify webhook signature (optional but recommended)
     const signature = event.headers['x-dodo-signature'];
-    const secret = process.env.DODO_WEBHOOK_SECRET;
-    if (secret && signature) {
-      try {
-        const expected = crypto
-          .createHmac('sha256', secret)
-          .update(event.body)
-          .digest('hex');
+    if (process.env.DODO_WEBHOOK_SECRET && signature) {
+      const expected = crypto
+        .createHmac('sha256', process.env.DODO_WEBHOOK_SECRET)
+        .update(event.body)
+        .digest('hex');
 
-        if (expected !== signature) {
-          console.warn('⚠️ Invalid Dodo signature');
-          return { statusCode: 401, body: 'Invalid signature' };
-        }
-      } catch (sigErr) {
-        console.error('❌ Signature verification failed:', sigErr);
-        return { statusCode: 400, body: 'Bad signature verification' };
+      if (expected !== signature) {
+        console.warn('⚠️ Invalid Dodo signature');
+        return { statusCode: 401, body: 'Invalid signature' };
       }
-    } else {
-      console.log('⚠️ No Dodo signature verification applied.');
     }
 
-    // ✅ Parse incoming data
     const body = JSON.parse(event.body || '{}');
-    console.log('📦 Webhook payload:', body);
 
-    const { email, product_slug, order_id, amount, affiliate_id } = body;
+    // ✅ Dodo sends different event types; only handle successful payments
+    if (body.event !== 'payment.succeeded') {
+      return { statusCode: 200, body: 'Ignored non-payment event' };
+    }
 
-    if (!email || !product_slug || !order_id) {
-      console.warn('⚠️ Missing required fields');
+    // ✅ Extract purchase info
+    const {
+      email,
+      metadata, // contains product info if configured
+      amount_total,
+      id: order_id,
+      affiliate_id
+    } = body.data || {};
+
+    if (!email || !metadata?.product_slug || !order_id) {
+      console.error('❌ Missing fields:', body.data);
       return { statusCode: 400, body: 'Missing required fields' };
     }
 
-    // ✅ Find product in Supabase
+    const product_slug = metadata.product_slug;
+    const amount = amount_total / 100; // Dodo often sends cents
+
+    // ✅ Find product
     const { data: product, error: prodErr } = await supabase
       .from('products')
       .select('*')
@@ -60,11 +60,11 @@ export async function handler(event) {
       .single();
 
     if (prodErr || !product) {
-      console.error('❌ Product not found', prodErr);
+      console.error('❌ Product not found:', product_slug, prodErr);
       return { statusCode: 404, body: 'Product not found' };
     }
 
-    // ✅ Record the purchase
+    // ✅ Record purchase
     const { data: purchase, error: purchaseErr } = await supabase
       .from('purchases')
       .insert({
@@ -74,46 +74,50 @@ export async function handler(event) {
         product_id: product.id,
         amount,
         affiliate_id: affiliate_id || null,
-        fulfilled: true,
+        fulfilled: true
       })
       .select()
       .single();
 
     if (purchaseErr) {
-      console.error('❌ Failed to record purchase', purchaseErr);
+      console.error('❌ purchaseErr', purchaseErr);
       return { statusCode: 500, body: 'Failed to record purchase' };
     }
 
-    // ✅ Create download token (valid for 24h)
+    // ✅ Generate secure token for file delivery
     const token = crypto.randomUUID();
     const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-    const { error: tokenErr } = await supabase.from('download_tokens').insert({
-      token,
-      purchase_id: purchase.id,
-      file_path: product.file_path,
-      expires_at,
-      used: false,
-    });
+    const { error: tokenErr } = await supabase
+      .from('download_tokens')
+      .insert({
+        token,
+        purchase_id: purchase.id,
+        product_id: product.id,
+        file_path: product.file_path,
+        expires_at,
+        used: false
+      });
 
     if (tokenErr) {
-      console.error('❌ Failed to create token', tokenErr);
-      return { statusCode: 500, body: 'Failed to create download token' };
+      console.error('❌ tokenErr', tokenErr);
+      return { statusCode: 500, body: 'Failed to create token' };
     }
 
-    console.log(`✅ Dodo purchase processed successfully: ${order_id}`);
+    console.log(`✅ Dodo purchase processed: ${order_id} | ${email}`);
 
-    // ✅ Return success
+    // ✅ Respond with redirect (Dodo will handle this if configured)
+    const thankYouUrl = `https://beparidig.netlify.app/thank-you?token=${token}`;
+
     return {
       statusCode: 200,
       body: JSON.stringify({
         message: 'Purchase recorded successfully',
-        token,
-        product_slug,
-      }),
+        redirect: thankYouUrl
+      })
     };
   } catch (err) {
-    console.error('❌ Webhook handler error:', err);
-    return { statusCode: 500, body: 'Internal Server Error' };
+    console.error('❌ handler error', err);
+    return { statusCode: 500, body: 'Error processing webhook' };
   }
 }
