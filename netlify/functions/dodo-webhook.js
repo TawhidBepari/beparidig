@@ -51,7 +51,7 @@ export async function handler(event) {
     const { data: product, error: prodErr } = await supabase
       .from('products')
       .select('*')
-      .eq('product_id', product_id)
+      .eq('id', product_id)
       .single();
 
     if (prodErr || !product) {
