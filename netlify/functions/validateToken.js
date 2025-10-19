@@ -12,7 +12,7 @@ export async function handler(event) {
       return { statusCode: 405, body: 'Method not allowed' };
     }
 
-    const token = (event.queryStringParameters && event.queryStringParameters.token) || null;
+    const token = event.queryStringParameters?.token || null;
     if (!token) {
       console.error('❌ Missing token in request');
       return { statusCode: 400, body: JSON.stringify({ success: false, message: 'Missing token' }) };
@@ -24,7 +24,6 @@ export async function handler(event) {
       .from('download_tokens')
       .select('file_path, expires_at, used')
       .eq('token', token)
-      .limit(1)
       .maybeSingle();
 
     if (selectError) {
@@ -40,25 +39,9 @@ export async function handler(event) {
     const now = new Date();
     const expiresAt = new Date(data.expires_at);
 
-    if (data.used) {
-      console.warn('⚠️ Token already used');
-      return { statusCode: 403, body: JSON.stringify({ success: false, message: 'Token already used' }) };
-    }
-
     if (now > expiresAt) {
       console.warn(`⚠️ Token expired at ${expiresAt.toISOString()}`);
       return { statusCode: 410, body: JSON.stringify({ success: false, message: 'Token expired' }) };
-    }
-
-    // Mark token as used
-    const { error: updateError } = await supabase
-      .from('download_tokens')
-      .update({ used: true })
-      .eq('token', token);
-
-    if (updateError) {
-      console.error('❌ Supabase update error:', updateError);
-      return { statusCode: 500, body: JSON.stringify({ success: false, message: 'DB update failed' }) };
     }
 
     const fileUrl = `${process.env.SITE_URL || 'https://beparidig.netlify.app'}/${data.file_path}`;
@@ -66,7 +49,11 @@ export async function handler(event) {
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ success: true, file: fileUrl })
+      body: JSON.stringify({
+        success: true,
+        file: fileUrl,
+        expires_at: expiresAt.toISOString()
+      })
     };
   } catch (err) {
     console.error('🔥 validateToken fatal error:', err);
