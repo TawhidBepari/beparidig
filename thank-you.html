@@ -19,9 +19,9 @@
 
   <main class="wrap">
     <section class="card" id="content" style="text-align:center; padding:48px;">
-      <h2>Validating your purchase…</h2>
-      <p class="small" id="sub">Please wait while we confirm your payment and prepare the download.</p>
-      <div id="spinner" style="margin-top:18px;">⏳ Preparing your download…</div>
+      <h2>Preparing your download…</h2>
+      <p class="small" id="sub">Please wait while we prepare your file.</p>
+      <div id="spinner" style="margin-top:18px;">⏳ Setting up your download…</div>
     </section>
   </main>
 
@@ -31,78 +31,51 @@
   document.addEventListener("DOMContentLoaded", async () => {
     const content = document.getElementById('content');
     const params = new URLSearchParams(window.location.search);
-
-    // Common Paddle transaction params
-    const txnId =
-      params.get("transaction_id") ||
-      params.get("_ptxn") ||
-      params.get("txn") ||
-      params.get("checkout_id") ||
-      params.get("purchase_id");
+    const token = params.get("token");
 
     function showMessage(title, html) {
       content.innerHTML = `<h2>${title}</h2><p class="small">${html}</p>`;
     }
 
-    if (!txnId) {
+    if (!token) {
       showMessage(
-        "Missing purchase identifier",
-        'We couldn’t detect your transaction ID. Please wait a few seconds and refresh, or contact support at <a href="mailto:support@beparidig.com">support@beparidig.com</a>.'
+        "Missing download link",
+        'We couldn’t detect your download token. Please check your purchase confirmation or contact support at <a href="mailto:support@beparidig.com">support@beparidig.com</a>.'
       );
       return;
     }
 
-    // Small delay to allow webhook insertion
-    await new Promise(r => setTimeout(r, 4000));
-
     try {
-      const res = await fetch(`/.netlify/functions/getTokenByTxn?transaction_id=${encodeURIComponent(txnId)}`);
-      const data = await res.json();
+      const v = await fetch(`/.netlify/functions/validateToken?token=${encodeURIComponent(token)}`);
+      const vjson = await v.json();
 
-      if (!res.ok || !data.token) {
+      if (vjson.success && vjson.file) {
+        const expiresAt = new Date(vjson.expires_at);
+        const expiryHuman = expiresAt.toLocaleString();
+
+        content.innerHTML = `
+          <h2>Thank you for your purchase!</h2>
+          <p class="muted">Your download is ready. Click below to access your file.</p>
+          <p style="margin-top:18px;">
+            <button id="downloadBtn" class="cta">Access your file</button>
+          </p>
+          <p class="small" style="margin-top:12px;">This link will expire at <strong>${expiryHuman}</strong>.</p>
+          <p class="small" style="margin-top:8px;">If you have trouble, contact support at <a href="mailto:support@beparidig.com">support@beparidig.com</a>.</p>
+        `;
+
+        document.getElementById('downloadBtn').addEventListener('click', async () => {
+          const btn = document.getElementById('downloadBtn');
+          btn.disabled = true;
+          btn.textContent = 'Preparing download...';
+          window.location.href = vjson.file;
+          setTimeout(() => { btn.textContent = 'Download started'; }, 2000);
+        });
+      } else {
         showMessage(
-          "Preparing your download",
-          "We are preparing your download. Please wait a few seconds and refresh this page. If it still doesn’t appear, contact support."
+          "Download not found",
+          "We couldn’t validate your download. Please try refreshing this page or contact support."
         );
-        return;
       }
-
-      const token = data.token;
-      const expiresAt = new Date(data.expires_at);
-      const expiryHuman = expiresAt.toLocaleString();
-
-      content.innerHTML = `
-        <h2>Thank you for your purchase!</h2>
-        <p class="muted">Your download is ready. Click below to access your file.</p>
-        <p style="margin-top:18px;">
-          <button id="downloadBtn" class="cta">Access your file</button>
-        </p>
-        <p class="small" style="margin-top:12px;">This link will expire at <strong>${expiryHuman}</strong> (12 hours after purchase).</p>
-        <p class="small" style="margin-top:8px;">If you have trouble, contact support at <a href="mailto:support@beparidig.com">support@beparidig.com</a>.</p>
-      `;
-
-      document.getElementById('downloadBtn').addEventListener('click', async () => {
-        const btn = document.getElementById('downloadBtn');
-        btn.disabled = true;
-        btn.textContent = 'Preparing download...';
-
-        const v = await fetch(`/.netlify/functions/validateToken?token=${encodeURIComponent(token)}`);
-        const vjson = await v.json();
-
-        if (vjson.success && vjson.file) {
-          const link = document.createElement('a');
-          link.href = vjson.file;
-          link.download = '';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          btn.textContent = 'Download started';
-        } else {
-          btn.disabled = false;
-          btn.textContent = 'Access your file';
-          alert(vjson.message || 'Could not start download. Please contact support.');
-        }
-      });
     } catch (err) {
       console.error(err);
       showMessage(
