@@ -1,52 +1,54 @@
 // netlify/functions/createCheckout.js
+import fetch from "node-fetch";
 
 export async function handler(event) {
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, body: "Method not allowed" };
+  }
+
   try {
-    if (event.httpMethod !== "POST") {
-      return { statusCode: 405, body: "Method Not Allowed" };
-    }
-
-    const DODO_API_BASE = process.env.DODO_API_BASE;
+    const DODO_API_BASE = process.env.DODO_API_BASE || "https://api.dodopayments.com/v1";
     const DODO_API_KEY = process.env.DODO_API_KEY;
-    const DODO_BUSINESS_ID = process.env.DODO_BUSINESS_ID;
 
-    if (!DODO_API_BASE || !DODO_API_KEY || !DODO_BUSINESS_ID) {
-      console.error("❌ Missing Dodo environment variables");
-      return { statusCode: 500, body: "Missing configuration" };
+    if (!DODO_API_KEY) {
+      console.error("❌ Missing DODO_API_KEY in environment variables");
+      return { statusCode: 500, body: JSON.stringify({ error: "Server misconfiguration" }) };
     }
 
-    // Example product_id — you already gave me yours ✅
-    const product_id = "pdt_2QXXpIv3PY3vC8qzG4QO7";
+    // ✅ Your product ID from Dodo
+    const productId = "pdt_2QXXpIv3PY3vC8qzG4QO7";
 
-    // Call Dodo API to create a checkout session
-    const response = await fetch(`${DODO_API_BASE}/checkouts`, {
+    // ✅ Define your thank-you URL (Dodo will redirect here after payment)
+    const successUrl = "https://beparidig.netlify.app/thank-you.html";
+
+    // ✅ Create checkout session
+    const response = await fetch(`${DODO_API_BASE}/checkout/create`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${DODO_API_KEY}`,
+        Authorization: `Bearer ${DODO_API_KEY}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        business_id: DODO_BUSINESS_ID,
-        product_id,
-        success_url: "https://beparidig.netlify.app/thank-you",
-        cancel_url: "https://beparidig.netlify.app/",
-      }),
+        product_id: productId,
+        redirect_url: successUrl
+      })
     });
 
     const data = await response.json();
 
-    if (!response.ok || !data?.checkout_url) {
-      console.error("❌ Dodo API error", data);
-      return { statusCode: 500, body: JSON.stringify({ error: "Dodo API error", details: data }) };
+    if (!response.ok) {
+      console.error("❌ Dodo API error:", data);
+      return { statusCode: response.status, body: JSON.stringify(data) };
     }
+
+    console.log("✅ Checkout created successfully:", data);
 
     return {
       statusCode: 200,
       body: JSON.stringify({ checkout_url: data.checkout_url })
     };
-
   } catch (err) {
-    console.error("🔥 createCheckout error:", err);
-    return { statusCode: 500, body: JSON.stringify({ error: "Server error" }) };
+    console.error("🔥 Fatal createCheckout error:", err);
+    return { statusCode: 500, body: JSON.stringify({ error: "Internal Server Error" }) };
   }
 }
