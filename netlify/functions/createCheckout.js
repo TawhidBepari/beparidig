@@ -1,28 +1,35 @@
-import fetch from "node-fetch";
-
+// ✅ /netlify/functions/createCheckout.js
 export async function handler(event) {
   try {
+    // Allow only POST requests
     if (event.httpMethod !== "POST") {
-      return { statusCode: 405, body: "Method not allowed" };
-    }
-
-    const { product_id } = JSON.parse(event.body || "{}");
-    if (!product_id) {
-      console.error("❌ Missing product_id in request");
       return {
-        statusCode: 400,
-        body: JSON.stringify({ error: "product_id is required" }),
+        statusCode: 405,
+        body: JSON.stringify({ error: "Method not allowed" }),
       };
     }
 
-    // ✅ Choose base URL based on mode
+    // Parse request body (if provided)
+    let body = {};
+    try {
+      body = JSON.parse(event.body || "{}");
+    } catch (e) {
+      console.error("Invalid JSON body:", e);
+    }
+
+    // ✅ Use your Dodo product ID (fallback if none provided)
+    const product_id = body.product_id || "pdt_2QXXpIv3PY3vC8qzG4QO7";
+
+    // ✅ Environment variables from Netlify dashboard
+    const apiKey = process.env.DODO_API_KEY;
     const baseUrl = process.env.DODO_API_BASE || "https://test.dodopayments.com/v1";
 
-    const res = await fetch(`${baseUrl}/checkouts`, {
+    // ✅ Create checkout using native fetch (no node-fetch!)
+    const response = await fetch(`${baseUrl}/checkouts`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.DODO_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         product_id,
@@ -31,26 +38,29 @@ export async function handler(event) {
       }),
     });
 
-    const data = await res.json();
+    const data = await response.json();
 
-    if (!res.ok || !data?.checkout_url) {
+    if (!response.ok || !data.checkout_url) {
       console.error("❌ Dodo API error:", data);
       return {
         statusCode: 500,
-        body: JSON.stringify({ error: "Dodo checkout failed", details: data }),
+        body: JSON.stringify({
+          error: "Failed to create checkout",
+          details: data,
+        }),
       };
     }
 
-    console.log("✅ Created checkout:", data.checkout_url);
+    // ✅ Success — return the checkout URL
     return {
       statusCode: 200,
       body: JSON.stringify({ checkout_url: data.checkout_url }),
     };
   } catch (err) {
-    console.error("🔥 createCheckout fatal error:", err);
+    console.error("🔥 createCheckout error:", err);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "Server error", details: err.message }),
+      body: JSON.stringify({ error: err.message }),
     };
   }
 }
