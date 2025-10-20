@@ -7,7 +7,7 @@ export async function handler(event) {
   }
 
   try {
-    const DODO_API_BASE = process.env.DODO_API_BASE || "https://api.dodopayments.com/v1";
+    const DODO_API_BASE = process.env.DODO_API_BASE;
     const DODO_API_KEY = process.env.DODO_API_KEY;
 
     if (!DODO_API_KEY) {
