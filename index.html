@@ -8,6 +8,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css"/>
 </head>
+
 <body>
   <header class="site-header">
     <div class="wrap header-inner">
@@ -49,39 +50,54 @@
 
   <footer class="footer">
     <div class="wrap">
-      <p>© 2025 BEPARI DIG — <a href="terms.html">Terms</a> • <a href="privacy.html">Privacy</a> • <a href="refund.html">Refund</a></p>
+      <p>© 2025 BEPARI DIG — 
+        <a href="terms.html">Terms</a> • 
+        <a href="privacy.html">Privacy</a> • 
+        <a href="refund.html">Refund</a>
+      </p>
       <p>Support: <a href="mailto:tawhidbepari2005@gmail.com">tawhidbepari2005@gmail.com</a></p>
     </div>
   </footer>
 
   <!-- ✅ Dodo Checkout Integration -->
   <script>
-  document.addEventListener("DOMContentLoaded", () => {
-    const btn = document.getElementById("buyBtn");
-    btn.addEventListener("click", async () => {
-      btn.disabled = true;
-      const originalText = btn.textContent;
-      btn.textContent = "Redirecting...";
+    document.addEventListener("DOMContentLoaded", () => {
+      const btn = document.getElementById("buyBtn");
+      if (!btn) return;
 
-      try {
-        const res = await fetch("/.netlify/functions/createCheckout", { method: "POST" });
-        const data = await res.json();
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        const originalText = btn.textContent;
+        btn.textContent = "Redirecting...";
 
-        if (data.checkout_url) {
-          window.location.href = data.checkout_url; // ✅ Redirect to Dodo checkout
-        } else {
-          alert("Error starting checkout. Please try again.");
-          console.error("Unexpected response:", data);
+        try {
+          // ✅ Call your Netlify serverless function
+          const res = await fetch("/.netlify/functions/createCheckout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              product_id: "pdt_2QXXpIv3PY3vC8qzG4QO7" // ✅ Your Dodo product ID
+            }),
+          });
+
+          const data = await res.json();
+
+          if (data?.checkout_url) {
+            // ✅ Redirect to the Dodo checkout page
+            window.location.href = data.checkout_url;
+          } else {
+            console.error("Unexpected response:", data);
+            alert("Error starting checkout. Please try again.");
+          }
+        } catch (err) {
+          console.error("Checkout error:", err);
+          alert("Something went wrong. Please try again later.");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = originalText;
         }
-      } catch (err) {
-        console.error("Checkout error:", err);
-        alert("Something went wrong. Please try again.");
-      } finally {
-        btn.disabled = false;
-        btn.textContent = originalText;
-      }
+      });
     });
-  });
   </script>
 </body>
 </html>
