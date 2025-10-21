@@ -19,7 +19,8 @@ export async function handler(event) {
     const body = JSON.parse(event.body || "{}");
     const product_id = body.product_id || "pdt_2QXXpIv3PY3vC8qzG4QO7";
     const apiKey = process.env.DODO_API_KEY;
-    const baseUrl = process.env.DODO_API_BASE || "https://test.dodopayments.com/v1";
+    const baseUrl =
+      process.env.DODO_API_BASE || "https://test.dodopayments.com/v1";
 
     console.log("🛒 Creating Dodo checkout:", { baseUrl, product_id });
 
@@ -36,7 +37,9 @@ export async function handler(event) {
             quantity: 1,
           },
         ],
-        success_url: "https://beparidig.netlify.app/thank-you?purchase_id={SESSION_ID}",
+        // ✅ Correct field name per Dodo docs
+        return_url:
+          "https://beparidig.netlify.app/thank-you?purchase_id={SESSION_ID}",
         cancel_url: "https://beparidig.netlify.app",
       }),
     });
@@ -61,17 +64,15 @@ export async function handler(event) {
 
     // ✅ Pre-store placeholder record in Supabase
     try {
-      const { error: insertError } = await supabase
-        .from("download_tokens")
-        .insert([
-          {
-            purchase_id: checkoutId,
-            token: null,
-            file_path: null,
-            expires_at: null,
-            used: false,
-          },
-        ]);
+      const { error: insertError } = await supabase.from("download_tokens").insert([
+        {
+          purchase_id: checkoutId,
+          token: null,
+          file_path: null,
+          expires_at: null,
+          used: false,
+        },
+      ]);
 
       if (insertError)
         console.warn("⚠️ Supabase insert warning:", insertError);
