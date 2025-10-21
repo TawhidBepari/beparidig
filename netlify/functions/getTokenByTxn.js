@@ -12,7 +12,6 @@ export async function handler(event) {
       return { statusCode: 405, body: 'Method not allowed' };
     }
 
-    // ✅ Accept multiple possible query param names for safety
     const params = event.queryStringParameters || {};
     const txn =
       params.txn ||
@@ -30,6 +29,9 @@ export async function handler(event) {
 
     console.log('🔍 Looking up token for purchase_id:', txn);
 
+    // Wait a short moment in case Supabase hasn’t finished writing
+    await new Promise((r) => setTimeout(r, 1000));
+
     const { data, error } = await supabase
       .from('download_tokens')
       .select('token, file_path, expires_at, used, created_at')
@@ -42,13 +44,16 @@ export async function handler(event) {
       console.error('❌ Supabase select error:', error);
       return {
         statusCode: 500,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ success: false, message: 'Database query failed' }),
       };
     }
 
     if (!data) {
+      console.warn('⚠️ No matching download token yet for transaction:', txn);
       return {
         statusCode: 404,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           success: false,
           message:
@@ -57,13 +62,13 @@ export async function handler(event) {
       };
     }
 
-    // ✅ Check expiry and usage
     const now = new Date();
     const expiresAt = new Date(data.expires_at);
 
     if (data.used) {
       return {
         statusCode: 410,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           success: false,
           message: 'Download link already used. Please contact support if needed.',
@@ -74,6 +79,7 @@ export async function handler(event) {
     if (now > expiresAt) {
       return {
         statusCode: 410,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           success: false,
           message: 'This download link has expired. Please contact support.',
@@ -81,13 +87,16 @@ export async function handler(event) {
       };
     }
 
-    // ✅ Return valid token
+    const fileUrl = `${process.env.SITE_URL || 'https://beparidig.netlify.app'}/${data.file_path}`;
+    console.log(`✅ Found token for ${txn}. File: ${fileUrl}`);
+
     return {
       statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         success: true,
         token: data.token,
-        file_path: data.file_path,
+        file: fileUrl,
         expires_at: data.expires_at,
       }),
     };
@@ -95,6 +104,7 @@ export async function handler(event) {
     console.error('❌ getTokenByTxn error:', err);
     return {
       statusCode: 500,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         success: false,
         message: 'Server error while validating purchase.',
