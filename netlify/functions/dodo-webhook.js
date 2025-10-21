@@ -37,13 +37,14 @@ export async function handler(event) {
 
     const data = body.data || {};
     const email = data.customer?.email;
-    const order_id = data.payment_id;
+    const order_id = data.payment_id; // pay_...
+    const checkout_id = data.checkout_session_id; // cks_...
     const product_id = data.product_cart?.[0]?.product_id;
     const amount = data.total_amount / 100; // Dodo sends cents
     const metadata = data.metadata || {};
 
-    if (!email || !order_id || !product_id) {
-      console.error('❌ Missing required fields:', { email, order_id, product_id });
+    if (!email || !order_id || !product_id || !checkout_id) {
+      console.error('❌ Missing required fields:', { email, order_id, product_id, checkout_id });
       return { statusCode: 400, body: 'Missing required fields' };
     }
 
@@ -59,7 +60,45 @@ export async function handler(event) {
       return { statusCode: 404, body: 'Product not found' };
     }
 
-    // ✅ Record purchase
+    // ✅ Try to update existing placeholder record first (created in createCheckout)
+    const token = crypto.randomUUID();
+    const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+    const { error: updateErr, count } = await supabase
+      .from('download_tokens')
+      .update({
+        token,
+        file_path: product.file_path,
+        expires_at,
+        used: false
+      })
+      .eq('purchase_id', checkout_id)
+      .select('*', { count: 'exact' });
+
+    if (updateErr) {
+      console.error('❌ updateErr', updateErr);
+      return { statusCode: 500, body: 'Failed to update existing token' };
+    }
+
+    if (count === 0) {
+      console.warn('⚠️ No placeholder found for checkout_id, creating fresh token record');
+      const { error: tokenErr } = await supabase
+        .from('download_tokens')
+        .insert({
+          token,
+          purchase_id: checkout_id,
+          product_id: product.id,
+          file_path: product.file_path,
+          expires_at,
+          used: false
+        });
+      if (tokenErr) {
+        console.error('❌ tokenErr', tokenErr);
+        return { statusCode: 500, body: 'Failed to create token' };
+      }
+    }
+
+    // ✅ Record purchase in purchases table
     const { data: purchase, error: purchaseErr } = await supabase
       .from('purchases')
       .insert({
@@ -78,30 +117,10 @@ export async function handler(event) {
       return { statusCode: 500, body: 'Failed to record purchase' };
     }
 
-    // ✅ Generate download token
-    const token = crypto.randomUUID();
-    const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
-    const { error: tokenErr } = await supabase
-      .from('download_tokens')
-      .insert({
-        token,
-        purchase_id: purchase.id,
-        product_id: product.id,
-        file_path: product.file_path,
-        expires_at,
-        used: false
-      });
-
-    if (tokenErr) {
-      console.error('❌ tokenErr', tokenErr);
-      return { statusCode: 500, body: 'Failed to create token' };
-    }
-
     console.log(`✅ Dodo purchase processed: ${order_id} | ${email}`);
 
     // ✅ Redirect URL for your frontend
-    const thankYouUrl = `https://beparidig.netlify.app/thank-you?token=${token}`;
+    const thankYouUrl = `https://beparidig.netlify.app/thank-you?purchase_id=${checkout_id}`;
 
     return {
       statusCode: 200,
