@@ -1,5 +1,4 @@
 // ✅ /netlify/functions/createCheckout.js
-import fetch from "node-fetch";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -18,7 +17,7 @@ export async function handler(event) {
     }
 
     const body = JSON.parse(event.body || "{}");
-    const product_id = body.product_id || "pdt_2QXXpIv3PY3vC8qzG4QO7"; // ✅ your Dodo product ID
+    const product_id = body.product_id || "pdt_2QXXpIv3PY3vC8qzG4QO7";
     const apiKey = process.env.DODO_API_KEY;
     const baseUrl = process.env.DODO_API_BASE || "https://test.dodopayments.com/v1";
 
@@ -37,7 +36,6 @@ export async function handler(event) {
             quantity: 1,
           },
         ],
-        // ✅ Include purchase_id in redirect
         success_url: "https://beparidig.netlify.app/thank-you?purchase_id={CHECKOUT_ID}",
         cancel_url: "https://beparidig.netlify.app",
       }),
@@ -57,7 +55,7 @@ export async function handler(event) {
       };
     }
 
-    // ✅ Pre-store placeholder in Supabase (optional but helpful)
+    // ✅ Pre-store placeholder in Supabase
     try {
       const { error: insertError } = await supabase
         .from("download_tokens")
@@ -71,8 +69,10 @@ export async function handler(event) {
           },
         ]);
 
-      if (insertError) console.warn("⚠️ Supabase insert warning:", insertError);
-      else console.log("✅ Placeholder record added for purchase_id:", data.checkout_id);
+      if (insertError)
+        console.warn("⚠️ Supabase insert warning:", insertError);
+      else
+        console.log("✅ Placeholder record added for purchase_id:", data.checkout_id);
     } catch (dbErr) {
       console.error("⚠️ Failed to insert placeholder in Supabase:", dbErr);
     }
