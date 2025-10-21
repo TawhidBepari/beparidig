@@ -36,7 +36,7 @@ export async function handler(event) {
             quantity: 1,
           },
         ],
-        success_url: "https://beparidig.netlify.app/thank-you?purchase_id={CHECKOUT_ID}",
+        success_url: "https://beparidig.netlify.app/thank-you?purchase_id={SESSION_ID}",
         cancel_url: "https://beparidig.netlify.app",
       }),
     });
@@ -44,7 +44,11 @@ export async function handler(event) {
     const data = await response.json();
     console.log("🧾 Dodo API response:", data);
 
-    if (!response.ok || !data.checkout_id || !data.checkout_url) {
+    // ✅ Dodo returns session_id instead of checkout_id
+    const checkoutId = data.session_id;
+    const checkoutUrl = data.checkout_url;
+
+    if (!response.ok || !checkoutId || !checkoutUrl) {
       return {
         statusCode: 500,
         headers: { "Content-Type": "application/json" },
@@ -55,13 +59,13 @@ export async function handler(event) {
       };
     }
 
-    // ✅ Pre-store placeholder in Supabase
+    // ✅ Pre-store placeholder record in Supabase
     try {
       const { error: insertError } = await supabase
         .from("download_tokens")
         .insert([
           {
-            purchase_id: data.checkout_id,
+            purchase_id: checkoutId,
             token: null,
             file_path: null,
             expires_at: null,
@@ -72,7 +76,7 @@ export async function handler(event) {
       if (insertError)
         console.warn("⚠️ Supabase insert warning:", insertError);
       else
-        console.log("✅ Placeholder record added for purchase_id:", data.checkout_id);
+        console.log("✅ Placeholder record added for purchase_id:", checkoutId);
     } catch (dbErr) {
       console.error("⚠️ Failed to insert placeholder in Supabase:", dbErr);
     }
@@ -80,7 +84,7 @@ export async function handler(event) {
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ checkout_url: data.checkout_url }),
+      body: JSON.stringify({ checkout_url: checkoutUrl }),
     };
   } catch (err) {
     console.error("🔥 createCheckout fatal error:", err);
