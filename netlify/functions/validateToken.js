@@ -15,7 +15,11 @@ export async function handler(event) {
     const token = event.queryStringParameters?.token || null;
     if (!token) {
       console.error('❌ Missing token in request');
-      return { statusCode: 400, body: JSON.stringify({ success: false, message: 'Missing token' }) };
+      return {
+        statusCode: 400,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ success: false, message: 'Missing token' }),
+      };
     }
 
     console.log(`🔍 Checking token: ${token}`);
@@ -28,12 +32,20 @@ export async function handler(event) {
 
     if (selectError) {
       console.error('❌ Supabase select error:', selectError);
-      return { statusCode: 500, body: JSON.stringify({ success: false, message: 'DB error' }) };
+      return {
+        statusCode: 500,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ success: false, message: 'DB error' }),
+      };
     }
 
     if (!data) {
       console.warn('⚠️ Invalid token — no matching row found.');
-      return { statusCode: 404, body: JSON.stringify({ success: false, message: 'Invalid token' }) };
+      return {
+        statusCode: 404,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ success: false, message: 'Invalid token' }),
+      };
     }
 
     const now = new Date();
@@ -41,7 +53,11 @@ export async function handler(event) {
 
     if (now > expiresAt) {
       console.warn(`⚠️ Token expired at ${expiresAt.toISOString()}`);
-      return { statusCode: 410, body: JSON.stringify({ success: false, message: 'Token expired' }) };
+      return {
+        statusCode: 410,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ success: false, message: 'Token expired' }),
+      };
     }
 
     const fileUrl = `${process.env.SITE_URL || 'https://beparidig.netlify.app'}/${data.file_path}`;
@@ -49,14 +65,19 @@ export async function handler(event) {
 
     return {
       statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         success: true,
         file: fileUrl,
-        expires_at: expiresAt.toISOString()
-      })
+        expires_at: expiresAt.toISOString(),
+      }),
     };
   } catch (err) {
     console.error('🔥 validateToken fatal error:', err);
-    return { statusCode: 500, body: JSON.stringify({ success: false, message: 'Server error' }) };
+    return {
+      statusCode: 500,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ success: false, message: 'Server error' }),
+    };
   }
 }
