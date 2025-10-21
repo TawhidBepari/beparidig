@@ -32,48 +32,66 @@
     const content = document.getElementById('content');
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token");
+    const payment_id = params.get("payment_id");
 
     function showMessage(title, html) {
       content.innerHTML = `<h2>${title}</h2><p class="small">${html}</p>`;
     }
 
-    if (!token) {
-      showMessage(
-        "Missing download link",
-        'We couldn’t detect your download token. Please check your purchase confirmation or contact support at <a href="mailto:support@beparidig.com">support@beparidig.com</a>.'
-      );
-      return;
-    }
-
     try {
-      const v = await fetch(`/.netlify/functions/validateToken?token=${encodeURIComponent(token)}`);
-      const vjson = await v.json();
+      // ✅ Case 1: Direct token validation
+      if (token) {
+        const v = await fetch(`/.netlify/functions/validateToken?token=${encodeURIComponent(token)}`);
+        const vjson = await v.json();
 
-      if (vjson.success && vjson.file) {
-        const expiresAt = new Date(vjson.expires_at);
-        const expiryHuman = expiresAt.toLocaleString();
+        if (vjson.success && vjson.file) {
+          const expiresAt = new Date(vjson.expires_at);
+          const expiryHuman = expiresAt.toLocaleString();
 
-        content.innerHTML = `
-          <h2>Thank you for your purchase!</h2>
-          <p class="muted">Your download is ready. Click below to access your file.</p>
-          <p style="margin-top:18px;">
-            <button id="downloadBtn" class="cta">Access your file</button>
-          </p>
-          <p class="small" style="margin-top:12px;">This link will expire at <strong>${expiryHuman}</strong>.</p>
-          <p class="small" style="margin-top:8px;">If you have trouble, contact support at <a href="mailto:support@beparidig.com">support@beparidig.com</a>.</p>
-        `;
+          content.innerHTML = `
+            <h2>Thank you for your purchase!</h2>
+            <p class="muted">Your download is ready. Click below to access your file.</p>
+            <p style="margin-top:18px;">
+              <button id="downloadBtn" class="cta">Access your file</button>
+            </p>
+            <p class="small" style="margin-top:12px;">This link will expire at <strong>${expiryHuman}</strong>.</p>
+            <p class="small" style="margin-top:8px;">If you have trouble, contact support at <a href="mailto:support@beparidig.com">support@beparidig.com</a>.</p>
+          `;
 
-        document.getElementById('downloadBtn').addEventListener('click', async () => {
-          const btn = document.getElementById('downloadBtn');
-          btn.disabled = true;
-          btn.textContent = 'Preparing download...';
-          window.location.href = vjson.file;
-          setTimeout(() => { btn.textContent = 'Download started'; }, 2000);
-        });
+          document.getElementById('downloadBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('downloadBtn');
+            btn.disabled = true;
+            btn.textContent = 'Preparing download...';
+            window.location.href = vjson.file;
+            setTimeout(() => { btn.textContent = 'Download started'; }, 2000);
+          });
+        } else {
+          showMessage(
+            "Download not ready",
+            "We couldn’t validate your download. Please refresh this page in a few seconds or contact support."
+          );
+        }
+
+      // ✅ Case 2: Dodo fallback (if only payment_id is sent)
+      } else if (payment_id) {
+        const res = await fetch(`/.netlify/functions/getTokenByTxn?transaction_id=${encodeURIComponent(payment_id)}`);
+        const data = await res.json();
+
+        if (data.token) {
+          // Redirect to same page with the token (auto validation)
+          window.location.href = `/thank-you?token=${data.token}`;
+        } else {
+          showMessage(
+            "Verifying your payment…",
+            "Your payment was received, but the download link isn’t ready yet. Please refresh after a few seconds."
+          );
+        }
+
+      // ❌ Case 3: No token or payment ID
       } else {
         showMessage(
-          "Download not found",
-          "We couldn’t validate your download. Please try refreshing this page or contact support."
+          "Missing download link",
+          'We couldn’t detect your download information. Please check your purchase confirmation or contact support at <a href="mailto:support@beparidig.com">support@beparidig.com</a>.'
         );
       }
     } catch (err) {
