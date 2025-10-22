@@ -28,23 +28,37 @@ export async function handler(event) {
     }
 
     const body = JSON.parse(event.body || '{}');
+    console.log('📩 Raw Dodo webhook body:', body);
 
-    // ✅ Only handle successful payment events
-    if (body.type !== 'payment.succeeded') {
-      console.log(`ℹ️ Ignored event: ${body.type}`);
-      return { statusCode: 200, body: 'Ignored non-payment event' };
+    // ✅ Handle both legacy & new Dodo formats
+    const eventType = body.type || body.eventType;
+    const data = body.data || body.payload || {};
+
+    // ✅ Only handle completed checkout / successful payments
+    if (
+      !['payment.succeeded', 'checkout.completed'].includes(eventType) ||
+      (data.status && data.status !== 'succeeded')
+    ) {
+      console.log(`ℹ️ Ignored event: ${eventType}`);
+      return { statusCode: 200, body: 'Ignored non-success event' };
     }
 
-    const data = body.data || {};
+    // ✅ Extract Dodo data
     const email = data.customer?.email;
-    const order_id = data.payment_id; // pay_...
-    const checkout_id = data.checkout_session_id; // cks_...
-    const product_id = data.product_cart?.[0]?.product_id;
-    const amount = data.total_amount / 100; // Dodo sends cents
+    const order_id = data.payment_id || data.id; // pay_...
+    const checkout_id = data.checkout_session_id || data.session_id; // cks_...
+    const product_id =
+      data.product_cart?.[0]?.product_id || data.product_id || null;
+    const amount = (data.total_amount || 0) / 100;
     const metadata = data.metadata || {};
 
     if (!email || !order_id || !product_id || !checkout_id) {
-      console.error('❌ Missing required fields:', { email, order_id, product_id, checkout_id });
+      console.error('❌ Missing required fields:', {
+        email,
+        order_id,
+        product_id,
+        checkout_id,
+      });
       return { statusCode: 400, body: 'Missing required fields' };
     }
 
@@ -60,17 +74,18 @@ export async function handler(event) {
       return { statusCode: 404, body: 'Product not found' };
     }
 
-    // ✅ Try to update existing placeholder record first (created in createCheckout)
+    // ✅ Generate new token & expiry
     const token = crypto.randomUUID();
     const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
+    // ✅ Try updating placeholder record (created by createCheckout.js)
     const { error: updateErr, count } = await supabase
       .from('download_tokens')
       .update({
         token,
         file_path: product.file_path,
         expires_at,
-        used: false
+        used: false,
       })
       .eq('purchase_id', checkout_id)
       .select('*', { count: 'exact' });
@@ -81,17 +96,17 @@ export async function handler(event) {
     }
 
     if (count === 0) {
-      console.warn('⚠️ No placeholder found for checkout_id, creating fresh token record');
-      const { error: tokenErr } = await supabase
-        .from('download_tokens')
-        .insert({
-          token,
-          purchase_id: checkout_id,
-          product_id: product.id,
-          file_path: product.file_path,
-          expires_at,
-          used: false
-        });
+      console.warn(
+        '⚠️ No placeholder found for checkout_id, creating fresh token record'
+      );
+      const { error: tokenErr } = await supabase.from('download_tokens').insert({
+        token,
+        purchase_id: checkout_id,
+        product_id: product.id,
+        file_path: product.file_path,
+        expires_at,
+        used: false,
+      });
       if (tokenErr) {
         console.error('❌ tokenErr', tokenErr);
         return { statusCode: 500, body: 'Failed to create token' };
@@ -99,18 +114,14 @@ export async function handler(event) {
     }
 
     // ✅ Record purchase in purchases table
-    const { data: purchase, error: purchaseErr } = await supabase
-      .from('purchases')
-      .insert({
-        email,
-        provider: 'dodo',
-        provider_order_id: order_id,
-        product_id: product.id,
-        amount,
-        fulfilled: true
-      })
-      .select()
-      .single();
+    const { error: purchaseErr } = await supabase.from('purchases').insert({
+      email,
+      provider: 'dodo',
+      provider_order_id: order_id,
+      product_id: product.id,
+      amount,
+      fulfilled: true,
+    });
 
     if (purchaseErr) {
       console.error('❌ purchaseErr', purchaseErr);
@@ -126,8 +137,8 @@ export async function handler(event) {
       statusCode: 200,
       body: JSON.stringify({
         message: 'Purchase recorded successfully',
-        redirect: thankYouUrl
-      })
+        redirect: thankYouUrl,
+      }),
     };
   } catch (err) {
     console.error('❌ handler error', err);
