@@ -24,6 +24,7 @@ export async function handler(event) {
 
     console.log("🛒 Creating Dodo checkout:", { baseUrl, product_id });
 
+    // ✅ Send checkout creation request to Dodo
     const response = await fetch(`${baseUrl}/checkouts`, {
       method: "POST",
       headers: {
@@ -37,9 +38,9 @@ export async function handler(event) {
             quantity: 1,
           },
         ],
-        // ✅ Correct field name per Dodo docs
-        return_url:
-          "https://beparidig.netlify.app/thank-you?purchase_id={SESSION_ID}",
+        // ✅ Correct placeholders according to Dodo docs
+        success_url:
+          "https://beparidig.netlify.app/thank-you?purchase_id={CHECKOUT_SESSION_ID}&payment_id={PAYMENT_ID}&status={STATUS}",
         cancel_url: "https://beparidig.netlify.app",
       }),
     });
@@ -47,11 +48,12 @@ export async function handler(event) {
     const data = await response.json();
     console.log("🧾 Dodo API response:", data);
 
-    // ✅ Dodo returns session_id instead of checkout_id
+    // ✅ Extract checkout session info
     const checkoutId = data.session_id;
     const checkoutUrl = data.checkout_url;
 
     if (!response.ok || !checkoutId || !checkoutUrl) {
+      console.error("❌ Failed to create checkout:", data);
       return {
         statusCode: 500,
         headers: { "Content-Type": "application/json" },
@@ -64,15 +66,17 @@ export async function handler(event) {
 
     // ✅ Pre-store placeholder record in Supabase
     try {
-      const { error: insertError } = await supabase.from("download_tokens").insert([
-        {
-          purchase_id: checkoutId,
-          token: null,
-          file_path: null,
-          expires_at: null,
-          used: false,
-        },
-      ]);
+      const { error: insertError } = await supabase
+        .from("download_tokens")
+        .insert([
+          {
+            purchase_id: checkoutId,
+            token: null,
+            file_path: null,
+            expires_at: null,
+            used: false,
+          },
+        ]);
 
       if (insertError)
         console.warn("⚠️ Supabase insert warning:", insertError);
@@ -82,6 +86,7 @@ export async function handler(event) {
       console.error("⚠️ Failed to insert placeholder in Supabase:", dbErr);
     }
 
+    // ✅ Return checkout URL to frontend
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
