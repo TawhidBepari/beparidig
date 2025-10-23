@@ -6,6 +6,11 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+// Helper: get ISO date +/- minutes
+function isoMinutesOffset(dt, minutes) {
+  return new Date(dt.getTime() + minutes * 60 * 1000).toISOString();
+}
+
 export async function handler(event) {
   try {
     if (event.httpMethod !== 'GET') {
@@ -13,11 +18,14 @@ export async function handler(event) {
     }
 
     const params = event.queryStringParameters || {};
+    // accept multiple query param names
     const txn =
       params.txn ||
       params.transaction_id ||
+      params.transactionId ||
       params.purchase_id ||
-      params.checkout_id ||
+      params.purchaseId ||
+      params.transaction ||
       null;
 
     if (!txn) {
@@ -27,88 +35,104 @@ export async function handler(event) {
       };
     }
 
-    console.log('🔍 Looking up token for purchase_id:', txn);
+    console.log('🔍 Looking up token for transaction:', txn);
 
-    // Wait a short moment in case Supabase hasn’t finished writing
-    await new Promise((r) => setTimeout(r, 1000));
-
-    const { data, error } = await supabase
+    // 1) Direct lookup: download_tokens.purchase_id == txn
+    const { data: direct, error: directErr } = await supabase
       .from('download_tokens')
-      .select('token, file_path, expires_at, used, created_at')
+      .select('token, file_path, expires_at, used, created_at, purchase_id, product_id')
       .eq('purchase_id', txn)
+      .limit(1)
+      .maybeSingle();
+
+    if (directErr) {
+      console.error('❌ Supabase direct select error:', directErr);
+      return { statusCode: 500, body: JSON.stringify({ success: false, message: 'DB error' }) };
+    }
+
+    if (direct) {
+      if (direct.used) {
+        return { statusCode: 410, body: JSON.stringify({ success: false, message: 'Token already used' }) };
+      }
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          success: true,
+          token: direct.token,
+          file_path: direct.file_path,
+          expires_at: direct.expires_at,
+        }),
+      };
+    }
+
+    // 2) If not found directly, try to map a payment_id -> purchase by looking up purchases table
+    // (This handles the case Dodo redirects with pay_... but placeholder was created with cks_...)
+    const { data: purchase, error: purchaseErr } = await supabase
+      .from('purchases')
+      .select('id, product_id, created_at, provider_order_id')
+      .eq('provider_order_id', txn)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (error) {
-      console.error('❌ Supabase select error:', error);
-      return {
-        statusCode: 500,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ success: false, message: 'Database query failed' }),
-      };
+    if (purchaseErr) {
+      console.error('❌ Supabase purchase select error:', purchaseErr);
+      return { statusCode: 500, body: JSON.stringify({ success: false, message: 'DB error' }) };
     }
 
-    if (!data) {
-      console.warn('⚠️ No matching download token yet for transaction:', txn);
-      return {
-        statusCode: 404,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          success: false,
-          message:
-            'No download available yet. Please wait a few seconds and refresh this page.',
-        }),
-      };
+    if (purchase) {
+      // attempt to find a download_tokens row for same product around the purchase time
+      // placeholder is created on checkout creation (earlier), so we search +/- 10 minutes
+      const createdAt = new Date(purchase.created_at || new Date());
+      const before = isoMinutesOffset(createdAt, -10);
+      const after = isoMinutesOffset(createdAt, 10);
+
+      const { data: candidate, error: candErr } = await supabase
+        .from('download_tokens')
+        .select('token, file_path, expires_at, used, created_at, purchase_id')
+        .eq('product_id', purchase.product_id)
+        .gte('created_at', before)
+        .lte('created_at', after)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (candErr) {
+        console.error('❌ Supabase candidate select error:', candErr);
+        return { statusCode: 500, body: JSON.stringify({ success: false, message: 'DB error' }) };
+      }
+
+      if (candidate) {
+        if (candidate.used) {
+          return { statusCode: 410, body: JSON.stringify({ success: false, message: 'Token already used' }) };
+        }
+        return {
+          statusCode: 200,
+          body: JSON.stringify({
+            success: true,
+            token: candidate.token,
+            file_path: candidate.file_path,
+            expires_at: candidate.expires_at,
+            purchase_id: candidate.purchase_id,
+          }),
+        };
+      }
     }
 
-    const now = new Date();
-    const expiresAt = new Date(data.expires_at);
-
-    if (data.used) {
-      return {
-        statusCode: 410,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          success: false,
-          message: 'Download link already used. Please contact support if needed.',
-        }),
-      };
-    }
-
-    if (now > expiresAt) {
-      return {
-        statusCode: 410,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          success: false,
-          message: 'This download link has expired. Please contact support.',
-        }),
-      };
-    }
-
-    const fileUrl = `${process.env.SITE_URL || 'https://beparidig.netlify.app'}/${data.file_path}`;
-    console.log(`✅ Found token for ${txn}. File: ${fileUrl}`);
-
+    // 3) Not found
+    console.warn('⚠️ No matching download token yet for transaction:', txn);
     return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
+      statusCode: 404,
       body: JSON.stringify({
-        success: true,
-        token: data.token,
-        file: fileUrl,
-        expires_at: data.expires_at,
+        success: false,
+        message: 'No download available yet. Please wait a few seconds and refresh this page.',
       }),
     };
   } catch (err) {
     console.error('❌ getTokenByTxn error:', err);
     return {
       statusCode: 500,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        success: false,
-        message: 'Server error while validating purchase.',
-      }),
+      body: JSON.stringify({ success: false, message: 'Server error while validating purchase.' }),
     };
   }
 }
