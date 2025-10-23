@@ -1,4 +1,33 @@
-<script>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Thank You — BEPARI DIG</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css"/>
+  <style>
+    .small { color:#666; font-size:0.95rem; }
+    .cta { background:#007b55; color:#fff; padding:10px 18px; border-radius:6px; text-decoration:none; display:inline-block; }
+    .muted { color:#777; font-size:0.9rem; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner"><div class="brand">BEPARI DIG</div></div>
+  </header>
+
+  <main class="wrap">
+    <section class="card" id="content" style="text-align:center; padding:48px;">
+      <h2>Preparing your download…</h2>
+      <p class="small" id="sub">Please wait while we prepare your file.</p>
+      <div id="spinner" style="margin-top:18px;">⏳ Setting up your download…</div>
+    </section>
+  </main>
+
+  <footer class="footer"><div class="wrap"><p class="small">© 2025 BEPARI DIG</p></div></footer>
+
+  <script>
 document.addEventListener("DOMContentLoaded", async () => {
   const content = document.getElementById("content");
   const params = new URLSearchParams(window.location.search);
@@ -100,3 +129,5 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 });
 </script>
+</body>
+</html>
