@@ -1,5 +1,6 @@
 // ✅ /netlify/functions/createCheckout.js
 import { createClient } from "@supabase/supabase-js";
+import crypto from "crypto"; // ✅ added safely, needed only for UUID generation
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -37,7 +38,7 @@ export async function handler(event) {
             quantity: 1,
           },
         ],
-        // ✅ Correct field name per Dodo docs
+        // ✅ Keep redirect logic untouched
         return_url:
           "https://beparidig.netlify.app/thank-you?purchase_id={SESSION_ID}",
         cancel_url: "https://beparidig.netlify.app",
@@ -64,10 +65,12 @@ export async function handler(event) {
 
     // ✅ Pre-store placeholder record in Supabase
     try {
+      const tempToken = crypto.randomUUID(); // ✅ Non-null temporary token
+
       const { error: insertError } = await supabase.from("download_tokens").insert([
         {
           purchase_id: checkoutId,
-          token: null,
+          token: tempToken, // ✅ fixes the NOT NULL constraint issue
           file_path: null,
           expires_at: null,
           used: false,
