@@ -2,6 +2,7 @@
 import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto"; // used only to create a safe temporary token
 
+// ✅ Initialize Supabase
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
@@ -18,7 +19,7 @@ export async function handler(event) {
     }
 
     const body = JSON.parse(event.body || "{}");
-    // Dodo product id (pdt_...)
+    // ✅ Default Dodo product id if none provided
     const product_id = body.product_id || "pdt_2QXXpIv3PY3vC8qzG4QO7";
     const apiKey = process.env.DODO_API_KEY;
     const baseUrl =
@@ -26,7 +27,7 @@ export async function handler(event) {
 
     console.log("🛒 Creating Dodo checkout:", { baseUrl, product_id });
 
-    // Create checkout on Dodo
+    // ✅ Create checkout session in Dodo
     const response = await fetch(`${baseUrl}/checkouts`, {
       method: "POST",
       headers: {
@@ -40,7 +41,7 @@ export async function handler(event) {
             quantity: 1,
           },
         ],
-        // leaving return_url exactly as you had it
+        // ✅ Your working return and cancel URLs — do not change
         return_url:
           "https://beparidig.netlify.app/thank-you?purchase_id={SESSION_ID}",
         cancel_url: "https://beparidig.netlify.app",
@@ -65,7 +66,9 @@ export async function handler(event) {
       };
     }
 
-    // ----------- NEW: get product.file_path from Supabase --------------
+    // ----------------------------------------------------------------------
+    // ✅ Retrieve file_path from Supabase (fallback if missing)
+    // ----------------------------------------------------------------------
     let filePath = process.env.DEFAULT_FILE_PATH || "downloads/AI-Prompt.pdf";
     try {
       const { data: productRow, error: prodErr } = await supabase
@@ -87,18 +90,20 @@ export async function handler(event) {
     } catch (err) {
       console.error("⚠️ Error while reading product from Supabase:", err);
     }
-    // ------------------------------------------------------------------
 
-    // Pre-store placeholder record in Supabase (make sure token & file_path are non-null)
+    // ----------------------------------------------------------------------
+    // ✅ Pre-store placeholder in download_tokens
+    // ----------------------------------------------------------------------
     try {
       const tempToken = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24h expiry placeholder
 
       const { error: insertError } = await supabase.from("download_tokens").insert([
         {
           purchase_id: checkoutId,
-          token: tempToken,         // non-null placeholder token
-          file_path: filePath,      // non-null file_path (from products or fallback)
-          expires_at: null,
+          token: tempToken,       // non-null placeholder token
+          file_path: filePath,    // valid file path
+          expires_at: expiresAt,  // non-null placeholder expiry
           used: false,
         },
       ]);
@@ -112,7 +117,9 @@ export async function handler(event) {
       console.error("⚠️ Failed to insert placeholder in Supabase:", dbErr);
     }
 
-    // Return checkout URL (unchanged)
+    // ----------------------------------------------------------------------
+    // ✅ Return checkout URL — ensures redirect continues working
+    // ----------------------------------------------------------------------
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
