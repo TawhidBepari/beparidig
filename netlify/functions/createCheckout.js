@@ -1,8 +1,7 @@
 // ✅ /netlify/functions/createCheckout.js
 import { createClient } from "@supabase/supabase-js";
-import crypto from "crypto"; // used only to create a safe temporary token
+import crypto from "crypto";
 
-// ✅ Initialize Supabase
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
@@ -19,13 +18,34 @@ export async function handler(event) {
     }
 
     const body = JSON.parse(event.body || "{}");
-    // ✅ Default Dodo product id if none provided
+
+    // ✅ Extract product_id and optional referral ID
     const product_id = body.product_id || "pdt_2QXXpIv3PY3vC8qzG4QO7";
+    const referral_id = body.referral_id || body.ref || null;
+
     const apiKey = process.env.DODO_API_KEY;
     const baseUrl =
       process.env.DODO_API_BASE || "https://test.dodopayments.com/v1";
 
-    console.log("🛒 Creating Dodo checkout:", { baseUrl, product_id });
+    console.log("🛒 Creating Dodo checkout:", { baseUrl, product_id, referral_id });
+
+    // ✅ Build checkout request payload
+    const checkoutPayload = {
+      product_cart: [
+        {
+          product_id,
+          quantity: 1,
+        },
+      ],
+      return_url:
+        "https://beparidig.netlify.app/thank-you?purchase_id={SESSION_ID}",
+      cancel_url: "https://beparidig.netlify.app",
+    };
+
+    // If user came from affiliate link, add metadata
+    if (referral_id) {
+      checkoutPayload.metadata = { referral_id };
+    }
 
     // ✅ Create checkout session in Dodo
     const response = await fetch(`${baseUrl}/checkouts`, {
@@ -34,18 +54,7 @@ export async function handler(event) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        product_cart: [
-          {
-            product_id,
-            quantity: 1,
-          },
-        ],
-        // ✅ Your working return and cancel URLs — do not change
-        return_url:
-          "https://beparidig.netlify.app/thank-you?purchase_id={SESSION_ID}",
-        cancel_url: "https://beparidig.netlify.app",
-      }),
+      body: JSON.stringify(checkoutPayload),
     });
 
     const data = await response.json();
@@ -67,7 +76,7 @@ export async function handler(event) {
     }
 
     // ----------------------------------------------------------------------
-    // ✅ Retrieve file_path from Supabase (fallback if missing)
+    // ✅ Retrieve product info from Supabase
     // ----------------------------------------------------------------------
     let filePath = process.env.DEFAULT_FILE_PATH || "downloads/AI-Prompt.pdf";
     try {
@@ -82,13 +91,9 @@ export async function handler(event) {
         console.warn("⚠️ Could not lookup product in Supabase:", prodErr);
       } else if (productRow && productRow.file_path) {
         filePath = productRow.file_path;
-      } else {
-        console.warn(
-          `⚠️ product row missing or file_path empty for dodo_product_id=${product_id}; using fallback ${filePath}`
-        );
       }
     } catch (err) {
-      console.error("⚠️ Error while reading product from Supabase:", err);
+      console.error("⚠️ Error reading product:", err);
     }
 
     // ----------------------------------------------------------------------
@@ -96,29 +101,51 @@ export async function handler(event) {
     // ----------------------------------------------------------------------
     try {
       const tempToken = crypto.randomUUID();
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24h expiry placeholder
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24h
 
       const { error: insertError } = await supabase.from("download_tokens").insert([
         {
           purchase_id: checkoutId,
-          token: tempToken,       // non-null placeholder token
-          file_path: filePath,    // valid file path
-          expires_at: expiresAt,  // non-null placeholder expiry
+          token: tempToken,
+          file_path: filePath,
+          expires_at: expiresAt,
           used: false,
         },
       ]);
 
-      if (insertError) {
-        console.warn("⚠️ Supabase insert warning:", insertError);
-      } else {
-        console.log("✅ Placeholder record added for purchase_id:", checkoutId);
-      }
+      if (insertError)
+        console.warn("⚠️ Supabase insert warning (download_tokens):", insertError);
     } catch (dbErr) {
-      console.error("⚠️ Failed to insert placeholder in Supabase:", dbErr);
+      console.error("⚠️ Failed to insert placeholder:", dbErr);
     }
 
     // ----------------------------------------------------------------------
-    // ✅ Return checkout URL — ensures redirect continues working
+    // ✅ If referral_id present → store temporary affiliate_commission record
+    // ----------------------------------------------------------------------
+    if (referral_id) {
+      try {
+        const { error: affErr } = await supabase
+          .from("affiliate_commissions")
+          .insert([
+            {
+              referral_id,
+              purchase_id: checkoutId,
+              amount: 0, // will be updated on webhook confirmation
+              status: "pending",
+            },
+          ]);
+
+        if (affErr)
+          console.warn("⚠️ Supabase insert warning (affiliate_commissions):", affErr);
+        else
+          console.log("✅ Affiliate referral recorded:", referral_id);
+      } catch (affCatch) {
+        console.error("⚠️ Failed to record affiliate referral:", affCatch);
+      }
+    }
+
+    // ----------------------------------------------------------------------
+    // ✅ Return checkout URL (redirect)
     // ----------------------------------------------------------------------
     return {
       statusCode: 200,
