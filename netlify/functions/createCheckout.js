@@ -1,8 +1,7 @@
-// ✅ /netlify/functions/createCheckout.js
 import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
 
-// ✅ Initialize Supabase
+// ✅ Initialize Supabase client
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
@@ -20,27 +19,26 @@ export async function handler(event) {
 
     const body = JSON.parse(event.body || "{}");
 
-    // ✅ Extract product_id and optional referral ID (affiliate code)
+    // ✅ Extract product_id and optional affiliate referral code
     const product_id = body.product_id || "pdt_2QXXpIv3PY3vC8qzG4QO7";
-    const referral_id = body.referral_id || body.ref || null;
+    const referral_code = body.referral_id || body.ref || null;
 
     const apiKey = process.env.DODO_API_KEY;
     const baseUrl =
       process.env.DODO_API_BASE || "https://test.dodopayments.com/v1";
 
-    console.log("🛒 Creating Dodo checkout:", { baseUrl, product_id, referral_id });
+    console.log("🛒 Creating Dodo checkout:", { baseUrl, product_id, referral_code });
 
-    // ✅ Build checkout request payload
+    // ✅ Build checkout payload for Dodo
     const checkoutPayload = {
       product_cart: [{ product_id, quantity: 1 }],
-      return_url:
-        "https://beparidig.netlify.app/thank-you?purchase_id={SESSION_ID}",
+      return_url: "https://beparidig.netlify.app/thank-you?purchase_id={SESSION_ID}",
       cancel_url: "https://beparidig.netlify.app",
     };
 
-    if (referral_id) checkoutPayload.metadata = { referral_id };
+    if (referral_code) checkoutPayload.metadata = { referral_code };
 
-    // ✅ Create checkout in Dodo
+    // ✅ Create checkout via Dodo API
     const response = await fetch(`${baseUrl}/checkouts`, {
       method: "POST",
       headers: {
@@ -73,6 +71,7 @@ export async function handler(event) {
     // ----------------------------------------------------------------------
     let filePath = process.env.DEFAULT_FILE_PATH || "downloads/AI-Prompt.pdf";
     let productRow = null;
+
     try {
       const { data: prodData, error: prodErr } = await supabase
         .from("products")
@@ -91,7 +90,7 @@ export async function handler(event) {
     }
 
     // ----------------------------------------------------------------------
-    // ✅ Pre-store placeholder in download_tokens
+    // ✅ Insert placeholder into download_tokens
     // ----------------------------------------------------------------------
     try {
       const tempToken = crypto.randomUUID();
@@ -100,42 +99,41 @@ export async function handler(event) {
       const { error: insertError } = await supabase.from("download_tokens").insert([
         {
           purchase_id: checkoutId,
-          token: tempToken,
           file_path: filePath,
+          token: tempToken,
           expires_at: expiresAt,
           used: false,
+          product_id: productRow?.id || null, // ✅ fixes null product_id
         },
       ]);
 
       if (insertError)
         console.warn("⚠️ Supabase insert warning (download_tokens):", insertError);
       else
-        console.log("✅ Placeholder record added for purchase_id:", checkoutId);
+        console.log("✅ Placeholder added in download_tokens for purchase_id:", checkoutId);
     } catch (dbErr) {
-      console.error("⚠️ Failed to insert placeholder:", dbErr);
+      console.error("⚠️ Failed to insert placeholder in Supabase:", dbErr);
     }
 
     // ----------------------------------------------------------------------
-    // ✅ If referral_id present → find affiliate and insert commission record
+    // ✅ If affiliate referral exists, store commission placeholder
     // ----------------------------------------------------------------------
-    if (referral_id) {
+    if (referral_code) {
       try {
-        console.log("🧩 Resolving affiliate by code:", referral_id);
+        console.log("🧩 Resolving affiliate by code:", referral_code);
 
-        // Find affiliate by code
+        // Find affiliate by referral code
         const { data: affRow, error: affLookupErr } = await supabase
           .from("affiliates")
           .select("id")
-          .eq("code", referral_id)
+          .eq("code", referral_code)
           .limit(1)
           .maybeSingle();
 
         if (affLookupErr) {
-          console.warn("⚠️ Error looking up affiliate:", affLookupErr);
-        }
-
-        if (!affRow || !affRow.id) {
-          console.warn("⚠️ No affiliate found with code:", referral_id);
+          console.warn("⚠️ Affiliate lookup error:", affLookupErr);
+        } else if (!affRow || !affRow.id) {
+          console.warn("⚠️ No affiliate found with code:", referral_code);
         } else {
           const affiliateId = affRow.id;
           console.log("✅ Found affiliate id:", affiliateId);
@@ -148,6 +146,8 @@ export async function handler(event) {
                 purchase_id: checkoutId,
                 product_id: productRow?.id || null,
                 amount: 0,
+                referral_id: referral_code,
+                status: "pending",
               },
             ])
             .select();
@@ -158,12 +158,12 @@ export async function handler(event) {
             console.log("✅ Affiliate commission placeholder inserted:", insertData);
         }
       } catch (affCatch) {
-        console.error("⚠️ Failed to record affiliate referral (exception):", affCatch);
+        console.error("⚠️ Failed to record affiliate referral:", affCatch);
       }
     }
 
     // ----------------------------------------------------------------------
-    // ✅ Return checkout URL (redirect)
+    // ✅ Return checkout URL to frontend
     // ----------------------------------------------------------------------
     return {
       statusCode: 200,
