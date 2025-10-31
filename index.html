@@ -59,9 +59,17 @@
     </div>
   </footer>
 
-  <!-- ✅ Dodo Checkout Integration -->
+  <!-- ✅ Affiliate tracking + Dodo Checkout Integration -->
   <script>
+    // ✅ Capture affiliate referral from ?ref=CODE and store locally
     document.addEventListener("DOMContentLoaded", () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const refCode = urlParams.get("ref");
+      if (refCode) {
+        localStorage.setItem("affiliate_ref", refCode);
+        console.log("✅ Affiliate referral stored:", refCode);
+      }
+
       const btn = document.getElementById("buyBtn");
       if (!btn) return;
 
@@ -71,19 +79,22 @@
         btn.textContent = "Redirecting...";
 
         try {
-          // ✅ Call your Netlify serverless function
+          // ✅ Retrieve affiliate referral if available
+          const referral_id = localStorage.getItem("affiliate_ref") || null;
+
+          // ✅ Call Netlify function with optional referral_id
           const res = await fetch("/.netlify/functions/createCheckout", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              product_id: "pdt_2QXXpIv3PY3vC8qzG4QO7" // ✅ Your Dodo product ID
+              product_id: "pdt_2QXXpIv3PY3vC8qzG4QO7",
+              referral_id,
             }),
           });
 
           const data = await res.json();
 
           if (data?.checkout_url) {
-            // ✅ Redirect to the Dodo checkout page
             window.location.href = data.checkout_url;
           } else {
             console.error("Unexpected response:", data);
