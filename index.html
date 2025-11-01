@@ -17,8 +17,7 @@
         <div class="small" style="color:#dbeee8; margin-top:6px;">Smart digital products for entrepreneurs</div>
       </div>
       <nav class="nav">
-        <a href="index.html">Home</a>
-        <a href="product.html">Product</a>
+        <a href="index.html" class="active">Home</a>
         <a href="about.html">About</a>
         <a href="contact.html">Contact</a>
         <a href="terms.html">Terms</a>
@@ -42,7 +41,6 @@
         </p>
         <p style="margin-top:18px;">
           <button id="buyBtn" class="cta">Buy Now — Instant Download</button>
-          <a class="button-ghost" href="product.html" style="margin-left:12px;">Product Details</a>
         </p>
       </div>
     </section>
@@ -59,10 +57,10 @@
     </div>
   </footer>
 
-  <!-- ✅ Affiliate tracking + Dodo Checkout Integration -->
+  <!-- ✅ Affiliate Tracking + Dodo Checkout Integration -->
   <script>
-    // ✅ Capture affiliate referral from ?ref=CODE and store locally
     document.addEventListener("DOMContentLoaded", () => {
+      // ✅ Capture affiliate referral (?ref=CODE) and store locally
       const urlParams = new URLSearchParams(window.location.search);
       const refCode = urlParams.get("ref");
       if (refCode) {
@@ -87,7 +85,7 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              product_id: "pdt_2QXXpIv3PY3vC8qzG4QO7",
+              product_id: "pdt_2QXXpIv3PY3vC8qzG4QO7", // replace if you change product
               referral_id,
             }),
           });
@@ -95,6 +93,7 @@
           const data = await res.json();
 
           if (data?.checkout_url) {
+            // ✅ Redirect user to Dodo checkout
             window.location.href = data.checkout_url;
           } else {
             console.error("Unexpected response:", data);
