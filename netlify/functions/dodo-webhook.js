@@ -1,7 +1,7 @@
+// ✅ /netlify/functions/dodo-webhook.js
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
-// ✅ Initialize Supabase
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
@@ -30,11 +30,9 @@ export async function handler(event) {
     const body = JSON.parse(event.body || '{}');
     console.log('📩 Raw Dodo webhook body:', body);
 
-    // ✅ Handle both legacy & new Dodo formats
     const eventType = body.type || body.eventType;
     const data = body.data || body.payload || {};
 
-    // ✅ Only handle completed checkout / successful payments
     if (
       !['payment.succeeded', 'checkout.completed'].includes(eventType) ||
       (data.status && data.status !== 'succeeded')
@@ -43,10 +41,9 @@ export async function handler(event) {
       return { statusCode: 200, body: 'Ignored non-success event' };
     }
 
-    // ✅ Extract Dodo data
     const email = data.customer?.email;
-    const order_id = data.payment_id || data.id; // pay_...
-    const checkout_id = data.checkout_session_id || data.session_id; // cks_...
+    const order_id = data.payment_id || data.id;
+    const checkout_id = data.checkout_session_id || data.session_id;
     const product_id =
       data.product_cart?.[0]?.product_id || data.product_id || null;
     const amount = (data.total_amount || 0) / 100;
@@ -78,7 +75,7 @@ export async function handler(event) {
     const token = crypto.randomUUID();
     const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-    // ✅ Try updating placeholder record (created by createCheckout.js)
+    // ✅ Update placeholder record
     const { error: updateErr, count } = await supabase
       .from('download_tokens')
       .update({
@@ -96,9 +93,7 @@ export async function handler(event) {
     }
 
     if (count === 0) {
-      console.warn(
-        '⚠️ No placeholder found for checkout_id, creating fresh token record'
-      );
+      console.warn('⚠️ No placeholder found, creating fresh token');
       const { error: tokenErr } = await supabase.from('download_tokens').insert({
         token,
         purchase_id: checkout_id,
@@ -113,7 +108,7 @@ export async function handler(event) {
       }
     }
 
-    // ✅ Record purchase in purchases table
+    // ✅ Record purchase
     const { error: purchaseErr } = await supabase.from('purchases').insert({
       email,
       provider: 'dodo',
@@ -130,7 +125,35 @@ export async function handler(event) {
 
     console.log(`✅ Dodo purchase processed: ${order_id} | ${email}`);
 
-    // ✅ Redirect URL for your frontend
+    // ----------------------------------------------------------------------
+    // 🧩 NEW: Update affiliate_commissions if referral exists
+    // ----------------------------------------------------------------------
+    if (metadata?.referral_id) {
+      try {
+        const commissionRate = 0.2; // 20% commission
+        const commissionAmount = parseFloat((amount * commissionRate).toFixed(2));
+
+        const { error: affErr } = await supabase
+          .from('affiliate_commissions')
+          .update({
+            amount: commissionAmount,
+            currency: 'USD',
+            status: 'paid',
+            paid_at: new Date().toISOString(),
+          })
+          .eq('purchase_id', checkout_id);
+
+        if (affErr) {
+          console.warn('⚠️ Failed to update affiliate commission:', affErr);
+        } else {
+          console.log(`💸 Affiliate commission paid: $${commissionAmount}`);
+        }
+      } catch (affCatch) {
+        console.error('❌ Affiliate update exception:', affCatch);
+      }
+    }
+
+    // ✅ Redirect URL
     const thankYouUrl = `https://beparidig.netlify.app/thank-you?purchase_id=${checkout_id}`;
 
     return {
