@@ -49,6 +49,13 @@ export async function handler(event) {
     const amount = (data.total_amount || 0) / 100;
     const metadata = data.metadata || {};
 
+    // ✅ Normalize referral ID
+    const referral_id =
+      metadata?.referral_id ||
+      metadata?.ref ||
+      metadata?.affiliate ||
+      null;
+
     if (!email || !order_id || !product_id || !checkout_id) {
       console.error('❌ Missing required fields:', {
         email,
@@ -126,11 +133,11 @@ export async function handler(event) {
     console.log(`✅ Dodo purchase processed: ${order_id} | ${email}`);
 
     // ----------------------------------------------------------------------
-    // 🧩 NEW: Update affiliate_commissions if referral exists
+    // 💸 Update affiliate_commissions if referral exists
     // ----------------------------------------------------------------------
-    if (metadata?.referral_id) {
+    if (referral_id) {
       try {
-        const commissionRate = 0.2; // 20% commission
+        const commissionRate = 0.5; // 50% commission
         const commissionAmount = parseFloat((amount * commissionRate).toFixed(2));
 
         const { error: affErr } = await supabase
@@ -138,15 +145,14 @@ export async function handler(event) {
           .update({
             amount: commissionAmount,
             currency: 'USD',
-            status: 'paid',
-            paid_at: new Date().toISOString(),
+            status: 'pending', // leave pending until you manually mark as paid
           })
           .eq('purchase_id', checkout_id);
 
         if (affErr) {
           console.warn('⚠️ Failed to update affiliate commission:', affErr);
         } else {
-          console.log(`💸 Affiliate commission paid: $${commissionAmount}`);
+          console.log(`💸 Affiliate commission recorded: $${commissionAmount} (pending)`);
         }
       } catch (affCatch) {
         console.error('❌ Affiliate update exception:', affCatch);
