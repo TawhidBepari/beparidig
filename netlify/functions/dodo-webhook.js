@@ -49,12 +49,14 @@ export async function handler(event) {
     const amount = (data.total_amount || 0) / 100;
     const metadata = data.metadata || {};
 
-    // ✅ Normalize referral ID
-    const referral_id =
-      metadata?.referral_id ||
-      metadata?.ref ||
+    // ✅ Normalize referral code (matches Dodo)
+    const referral_code =
+      metadata?.referral_code ||
+      metadata?.referral ||
       metadata?.affiliate ||
       null;
+
+    console.log('🧪 Referral code detected:', referral_code);
 
     if (!email || !order_id || !product_id || !checkout_id) {
       console.error('❌ Missing required fields:', {
@@ -73,6 +75,8 @@ export async function handler(event) {
       .eq('dodo_product_id', product_id)
       .single();
 
+    console.log('🧪 Product lookup result:', { product, prodErr });
+
     if (prodErr || !product) {
       console.error('❌ Product not found:', product_id, prodErr);
       return { statusCode: 404, body: 'Product not found' };
@@ -83,7 +87,7 @@ export async function handler(event) {
     const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
     // ✅ Update placeholder record
-    const { error: updateErr, count } = await supabase
+    const { data: tokenUpdate, error: updateErr, count } = await supabase
       .from('download_tokens')
       .update({
         token,
@@ -94,21 +98,27 @@ export async function handler(event) {
       .eq('purchase_id', checkout_id)
       .select('*', { count: 'exact' });
 
+    console.log('🧪 download_token update result:', { tokenUpdate, updateErr, count });
+
     if (updateErr) {
       console.error('❌ updateErr', updateErr);
       return { statusCode: 500, body: 'Failed to update existing token' };
     }
 
-    if (count === 0) {
-      console.warn('⚠️ No placeholder found, creating fresh token');
-      const { error: tokenErr } = await supabase.from('download_tokens').insert({
-        token,
-        purchase_id: checkout_id,
-        product_id: product.id,
-        file_path: product.file_path,
-        expires_at,
-        used: false,
-      });
+    if (!count || count === 0) {
+      console.warn('⚠️ No placeholder found, creating new token');
+      const { data: tokenInsert, error: tokenErr } = await supabase
+        .from('download_tokens')
+        .insert({
+          token,
+          purchase_id: checkout_id,
+          product_id: product.id,
+          file_path: product.file_path,
+          expires_at,
+          used: false,
+        })
+        .select('*');
+      console.log('🧪 token insert result:', { tokenInsert, tokenErr });
       if (tokenErr) {
         console.error('❌ tokenErr', tokenErr);
         return { statusCode: 500, body: 'Failed to create token' };
@@ -116,14 +126,19 @@ export async function handler(event) {
     }
 
     // ✅ Record purchase
-    const { error: purchaseErr } = await supabase.from('purchases').insert({
-      email,
-      provider: 'dodo',
-      provider_order_id: order_id,
-      product_id: product.id,
-      amount,
-      fulfilled: true,
-    });
+    const { data: purchaseInsert, error: purchaseErr } = await supabase
+      .from('purchases')
+      .insert({
+        email,
+        provider: 'dodo',
+        provider_order_id: order_id,
+        product_id: product.id,
+        amount,
+        fulfilled: true,
+      })
+      .select('*');
+
+    console.log('🧪 purchase insert:', { purchaseInsert, purchaseErr });
 
     if (purchaseErr) {
       console.error('❌ purchaseErr', purchaseErr);
@@ -133,26 +148,45 @@ export async function handler(event) {
     console.log(`✅ Dodo purchase processed: ${order_id} | ${email}`);
 
     // ----------------------------------------------------------------------
-    // 💸 Update affiliate_commissions if referral exists
+    // 💸 Affiliate commission handling
     // ----------------------------------------------------------------------
-    if (referral_id) {
+    if (referral_code) {
+      console.log('🧪 Processing affiliate commission for:', referral_code);
       try {
-        const commissionRate = 0.5; // 50% commission
-        const commissionAmount = parseFloat((amount * commissionRate).toFixed(2));
+        // Look up affiliate
+        const { data: affiliate, error: affLookupErr } = await supabase
+          .from('affiliates')
+          .select('id, code')
+          .eq('code', referral_code)
+          .single();
 
-        const { error: affErr } = await supabase
-          .from('affiliate_commissions')
-          .update({
-            amount: commissionAmount,
-            currency: 'USD',
-            status: 'pending', // leave pending until you manually mark as paid
-          })
-          .eq('purchase_id', checkout_id);
+        console.log('🧪 affiliate lookup:', { affiliate, affLookupErr });
 
-        if (affErr) {
-          console.warn('⚠️ Failed to update affiliate commission:', affErr);
+        if (affiliate) {
+          const commissionRate = 0.5;
+          const commissionAmount = parseFloat((amount * commissionRate).toFixed(2));
+
+          // Insert or update affiliate commission
+          const { data: affInsert, error: affErr } = await supabase
+            .from('affiliate_commissions')
+            .upsert({
+              affiliate_id: affiliate.id,
+              purchase_id: checkout_id,
+              amount: commissionAmount,
+              currency: 'USD',
+              status: 'pending',
+            })
+            .select('*');
+
+          console.log('🧪 affiliate_commission upsert:', { affInsert, affErr });
+
+          if (affErr) {
+            console.warn('⚠️ Failed to record affiliate commission:', affErr);
+          } else {
+            console.log(`💸 Affiliate commission recorded: $${commissionAmount} (pending)`);
+          }
         } else {
-          console.log(`💸 Affiliate commission recorded: $${commissionAmount} (pending)`);
+          console.warn('⚠️ No affiliate found for code:', referral_code);
         }
       } catch (affCatch) {
         console.error('❌ Affiliate update exception:', affCatch);
