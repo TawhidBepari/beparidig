@@ -4,7 +4,7 @@ import crypto from 'crypto';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY // 👈 Must be the *service* key, not anon
+  process.env.SUPABASE_SERVICE_KEY // Must be service key, not anon
 );
 
 export async function handler(event) {
@@ -33,7 +33,7 @@ export async function handler(event) {
     const eventType = body.type || body.eventType;
     const data = body.data || body.payload || {};
 
-    // ✅ Only process succeeded checkouts
+    // ✅ Only process successful payments
     if (
       !['payment.succeeded', 'checkout.completed'].includes(eventType) ||
       (data.status && data.status !== 'succeeded')
@@ -48,15 +48,18 @@ export async function handler(event) {
     const checkout_id = data.checkout_session_id || data.session_id;
     const product_id =
       data.product_cart?.[0]?.product_id || data.product_id || null;
-    const amount = (data.settlement_amount ?? data.total_amount ?? 0) / (data.settlement_amount ? 1 : 100);
-    const reportCurrency = data.settlement_currency || 'USD';
 
+    // Convert cents to standard currency
+    const amount = (data.settlement_amount ?? data.total_amount ?? 0) / (data.settlement_amount ? 1 : 100);
+    const reportCurrency = data.settlement_currency || data.currency || 'USD';
+
+    // Extract referral code from metadata
     const metadata = data.metadata || {};
     const referralCode =
+      metadata?.referral_code ||
       metadata?.referral_id ||
       metadata?.ref ||
       metadata?.affiliate ||
-      metadata?.affonso_referral ||
       null;
 
     if (!email || !order_id || !product_id || !checkout_id) {
@@ -64,7 +67,7 @@ export async function handler(event) {
       return { statusCode: 400, body: 'Missing required fields' };
     }
 
-    // ✅ Find product
+    // ✅ Find product info
     const { data: product, error: prodErr } = await supabase
       .from('products')
       .select('id, price, currency, file_path')
@@ -80,7 +83,7 @@ export async function handler(event) {
     const token = crypto.randomUUID();
     const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-    const { data: updatedToken, error: tokenUpdateErr } = await supabase
+    const { data: tokenUpdate, error: tokenUpdateErr } = await supabase
       .from('download_tokens')
       .update({
         token,
@@ -89,14 +92,13 @@ export async function handler(event) {
         used: false,
         product_id: product.id
       })
-      .eq('purchase_id', checkout_id)
-      .select('id');
+      .eq('purchase_id', checkout_id);
 
     if (tokenUpdateErr) {
       console.error('⚠️ download_tokens update error:', tokenUpdateErr);
     }
 
-    if (!updatedToken || updatedToken.length === 0) {
+    if (!tokenUpdate || tokenUpdate.length === 0) {
       const { error: tokenInsertErr } = await supabase
         .from('download_tokens')
         .insert({
@@ -110,14 +112,16 @@ export async function handler(event) {
 
       if (tokenInsertErr) console.error('⚠️ Failed to insert token:', tokenInsertErr);
       else console.log('✅ Token created for', checkout_id);
+    } else {
+      console.log('✅ Updated existing token for', checkout_id);
     }
 
-    // ✅ Record purchase
+    // ✅ Record purchase safely (only insert what your schema supports)
     const { error: purchaseErr } = await supabase.from('purchases').insert({
       email,
       provider: 'dodo',
-      provider_order_id: order_id,
-      provider_checkout_id: checkout_id,
+      order_id, // renamed from provider_order_id if needed
+      checkout_id, // renamed from provider_checkout_id if needed
       product_id: product.id,
       amount,
       currency: reportCurrency || product.currency || 'USD',
@@ -129,9 +133,9 @@ export async function handler(event) {
       return { statusCode: 500, body: 'Failed to record purchase' };
     }
 
-    console.log(`✅ Dodo purchase recorded: ${email} | ${amount} ${reportCurrency}`);
+    console.log(`✅ Purchase recorded: ${email} | ${amount} ${reportCurrency}`);
 
-    // ✅ Affiliate commission logic
+    // ✅ Affiliate commission
     if (referralCode) {
       console.log('🔎 Referral detected:', referralCode);
 
@@ -157,14 +161,16 @@ export async function handler(event) {
           created_at: new Date().toISOString()
         });
 
-        if (affInsertErr) console.error('⚠️ Failed to insert affiliate commission:', affInsertErr);
-        else console.log(`💸 Recorded 50% commission = ${commissionAmount} ${reportCurrency}`);
+        if (affInsertErr)
+          console.error('⚠️ Failed to insert affiliate commission:', affInsertErr);
+        else
+          console.log(`💸 Recorded 50% commission = ${commissionAmount} ${reportCurrency}`);
       }
     } else {
       console.log('ℹ️ No referral code — skipping affiliate commission');
     }
 
-    // ✅ Redirect URL
+    // ✅ Redirect after purchase
     const thankYouUrl = `https://beparidig.netlify.app/thank-you?purchase_id=${checkout_id}`;
     return {
       statusCode: 200,
@@ -172,7 +178,7 @@ export async function handler(event) {
     };
 
   } catch (err) {
-    console.error('🔥 dodo-webhook fatal error', err);
+    console.error('🔥 Fatal error in dodo-webhook:', err);
     return { statusCode: 500, body: 'Webhook processing failed' };
   }
 }
