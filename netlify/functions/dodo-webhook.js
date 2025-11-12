@@ -50,7 +50,9 @@ export async function handler(event) {
       data.product_cart?.[0]?.product_id || data.product_id || null;
 
     // Convert cents to standard currency
-    const amount = (data.settlement_amount ?? data.total_amount ?? 0) / (data.settlement_amount ? 1 : 100);
+    const amount =
+      (data.settlement_amount ?? data.total_amount ?? 0) /
+      (data.settlement_amount ? 1 : 100);
     const reportCurrency = data.settlement_currency || data.currency || 'USD';
 
     // Extract referral code from metadata
@@ -63,7 +65,12 @@ export async function handler(event) {
       null;
 
     if (!email || !order_id || !product_id || !checkout_id) {
-      console.error('❌ Missing required fields', { email, order_id, product_id, checkout_id });
+      console.error('❌ Missing required fields', {
+        email,
+        order_id,
+        product_id,
+        checkout_id
+      });
       return { statusCode: 400, body: 'Missing required fields' };
     }
 
@@ -79,10 +86,11 @@ export async function handler(event) {
       return { statusCode: 404, body: 'Product not found' };
     }
 
-    // ✅ Create or update download token
+    // ✅ Create or update download token (fixed duplicate issue)
     const token = crypto.randomUUID();
     const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
+    // Try update first
     const { data: tokenUpdate, error: tokenUpdateErr } = await supabase
       .from('download_tokens')
       .update({
@@ -98,6 +106,7 @@ export async function handler(event) {
       console.error('⚠️ download_tokens update error:', tokenUpdateErr);
     }
 
+    // Insert safely if not updated
     if (!tokenUpdate || tokenUpdate.length === 0) {
       const { error: tokenInsertErr } = await supabase
         .from('download_tokens')
@@ -108,20 +117,23 @@ export async function handler(event) {
           file_path: product.file_path,
           expires_at,
           used: false
-        });
+        })
+        .onConflict('token') // ✅ prevents duplicate-key error on webhook retries
+        .ignore();
 
-      if (tokenInsertErr) console.error('⚠️ Failed to insert token:', tokenInsertErr);
+      if (tokenInsertErr)
+        console.error('⚠️ Failed to insert token:', tokenInsertErr);
       else console.log('✅ Token created for', checkout_id);
     } else {
       console.log('✅ Updated existing token for', checkout_id);
     }
 
-    // ✅ Record purchase safely (only insert what your schema supports)
+    // ✅ Record purchase safely
     const { error: purchaseErr } = await supabase.from('purchases').insert({
       email,
       provider: 'dodo',
-      order_id, // renamed from provider_order_id if needed
-      checkout_id, // renamed from provider_checkout_id if needed
+      provider_order_id: order_id,
+      provider_checkout_id: checkout_id,
       product_id: product.id,
       amount,
       currency: reportCurrency || product.currency || 'USD',
@@ -149,22 +161,31 @@ export async function handler(event) {
         console.warn('⚠️ Affiliate not found for referral code:', referralCode);
       } else {
         const commissionRate = 0.5;
-        const commissionAmount = parseFloat((amount * commissionRate).toFixed(2));
+        const commissionAmount = parseFloat(
+          (amount * commissionRate).toFixed(2)
+        );
 
-        const { error: affInsertErr } = await supabase.from('affiliate_commissions').insert({
-          affiliate_id: affiliate.id,
-          purchase_id: checkout_id,
-          product_id: product.id,
-          amount: commissionAmount,
-          currency: reportCurrency || 'USD',
-          status: 'pending',
-          created_at: new Date().toISOString()
-        });
+        const { error: affInsertErr } = await supabase
+          .from('affiliate_commissions')
+          .insert({
+            affiliate_id: affiliate.id,
+            purchase_id: checkout_id,
+            product_id: product.id,
+            amount: commissionAmount,
+            currency: reportCurrency || 'USD',
+            status: 'pending',
+            created_at: new Date().toISOString()
+          });
 
         if (affInsertErr)
-          console.error('⚠️ Failed to insert affiliate commission:', affInsertErr);
+          console.error(
+            '⚠️ Failed to insert affiliate commission:',
+            affInsertErr
+          );
         else
-          console.log(`💸 Recorded 50% commission = ${commissionAmount} ${reportCurrency}`);
+          console.log(
+            `💸 Recorded 50% commission = ${commissionAmount} ${reportCurrency}`
+          );
       }
     } else {
       console.log('ℹ️ No referral code — skipping affiliate commission');
@@ -176,7 +197,6 @@ export async function handler(event) {
       statusCode: 200,
       body: JSON.stringify({ message: 'OK', redirect: thankYouUrl })
     };
-
   } catch (err) {
     console.error('🔥 Fatal error in dodo-webhook:', err);
     return { statusCode: 500, body: 'Webhook processing failed' };
