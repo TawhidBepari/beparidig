@@ -42,20 +42,22 @@ export async function handler(event) {
       return { statusCode: 200, body: 'Ignored non-success event' };
     }
 
-    // ✅ Normalize fields
+    // ===========================
+    //  NORMALIZED FIELDS
+    // ===========================
     const email = data.customer?.email;
     const order_id = data.payment_id || data.id;
     const checkout_id = data.checkout_session_id || data.session_id;
     const product_id =
       data.product_cart?.[0]?.product_id || data.product_id || null;
 
-    // Convert cents to standard currency
+    // Convert cents → currency
     const amount =
       (data.settlement_amount ?? data.total_amount ?? 0) /
       (data.settlement_amount ? 1 : 100);
     const reportCurrency = data.settlement_currency || data.currency || 'USD';
 
-    // Extract referral code from metadata
+    // Referral Code
     const metadata = data.metadata || {};
     const referralCode =
       metadata?.referral_code ||
@@ -74,7 +76,9 @@ export async function handler(event) {
       return { statusCode: 400, body: 'Missing required fields' };
     }
 
-    // ✅ Find product info
+    // ===========================
+    //  PRODUCT LOOKUP
+    // ===========================
     const { data: product, error: prodErr } = await supabase
       .from('products')
       .select('id, price, currency, file_path')
@@ -86,7 +90,9 @@ export async function handler(event) {
       return { statusCode: 404, body: 'Product not found' };
     }
 
-    // ✅ Create or update download token (fixed duplicate issue)
+    // ===========================
+    //  DOWNLOAD TOKEN (safe update + insert)
+    // ===========================
     const token = crypto.randomUUID();
     const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
@@ -106,7 +112,7 @@ export async function handler(event) {
       console.error('⚠️ download_tokens update error:', tokenUpdateErr);
     }
 
-    // Insert safely if not updated
+    // Insert fallback
     if (!tokenUpdate || tokenUpdate.length === 0) {
       const { error: tokenInsertErr } = await supabase
         .from('download_tokens')
@@ -117,9 +123,7 @@ export async function handler(event) {
           file_path: product.file_path,
           expires_at,
           used: false
-        })
-        .onConflict('token') // ✅ prevents duplicate-key error on webhook retries
-        .ignore();
+        });
 
       if (tokenInsertErr)
         console.error('⚠️ Failed to insert token:', tokenInsertErr);
@@ -128,7 +132,9 @@ export async function handler(event) {
       console.log('✅ Updated existing token for', checkout_id);
     }
 
-    // ✅ Record purchase safely
+    // ===========================
+    //  CREATE PURCHASE RECORD
+    // ===========================
     const { error: purchaseErr } = await supabase.from('purchases').insert({
       email,
       provider: 'dodo',
@@ -147,7 +153,9 @@ export async function handler(event) {
 
     console.log(`✅ Purchase recorded: ${email} | ${amount} ${reportCurrency}`);
 
-    // ✅ Affiliate commission
+    // ======================================================
+    //  AFFILIATE COMMISSION (patched purchase linking)
+    // ======================================================
     if (referralCode) {
       console.log('🔎 Referral detected:', referralCode);
 
@@ -158,18 +166,21 @@ export async function handler(event) {
         .maybeSingle();
 
       if (affErr || !affiliate) {
-        console.warn('⚠️ Affiliate not found for referral code:', referralCode);
+        console.warn('⚠️ Affiliate not found for:', referralCode);
       } else {
         const commissionRate = 0.5;
         const commissionAmount = parseFloat(
           (amount * commissionRate).toFixed(2)
         );
 
+        // 🔥 Patched: correctly refer to provider_checkout_id
+        const providerPurchaseId = checkout_id;
+
         const { error: affInsertErr } = await supabase
           .from('affiliate_commissions')
           .insert({
             affiliate_id: affiliate.id,
-            purchase_id: checkout_id,
+            purchase_id: providerPurchaseId, // ⬅️ FIXED
             product_id: product.id,
             amount: commissionAmount,
             currency: reportCurrency || 'USD',
@@ -191,7 +202,9 @@ export async function handler(event) {
       console.log('ℹ️ No referral code — skipping affiliate commission');
     }
 
-    // ✅ Redirect after purchase
+    // ===========================
+    //  REDIRECT USER
+    // ===========================
     const thankYouUrl = `https://beparidig.netlify.app/thank-you?purchase_id=${checkout_id}`;
     return {
       statusCode: 200,
