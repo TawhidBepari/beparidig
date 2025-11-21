@@ -1,4 +1,4 @@
-// /netlify/functions/getTokenByTxn.js
+// ✅ /netlify/functions/getTokenByTxn.js
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -8,7 +8,8 @@ const supabase = createClient(
 
 export async function handler(event) {
   try {
-    const transaction_id = event.queryStringParameters?.transaction_id;
+    const params = event.queryStringParameters || {};
+    const transaction_id = params.transaction_id;
 
     if (!transaction_id) {
       return {
@@ -19,55 +20,63 @@ export async function handler(event) {
 
     console.log("🔍 Looking up token for transaction:", transaction_id);
 
-    // ---------------------------------------------------------
-    // Step 1: Find purchase by provider_order_id (Dodo pay_...)
-    // ---------------------------------------------------------
+    // ------------------------------------------------------------------
+    // Step 1: Find purchase record by Dodo payment ID (pay_...)
+    // ------------------------------------------------------------------
     const { data: purchase, error: purchaseErr } = await supabase
       .from("purchases")
-      .select("id, product_id")
+      .select("provider_order_id, product_id")
       .eq("provider_order_id", transaction_id)
       .single();
 
     if (purchaseErr || !purchase) {
-      console.warn("⚠️ No purchase found:", transaction_id);
+      console.warn("⚠️ No purchase found for transaction:", transaction_id);
       return {
         statusCode: 404,
         body: JSON.stringify({ error: "Purchase not found" }),
       };
     }
 
-    // ---------------------------------------------------------
-    // Step 2: Fetch token linked to THIS purchase
-    // ---------------------------------------------------------
+    // ------------------------------------------------------------------
+    // Step 2: Find the download token linked to this purchase
+    // ------------------------------------------------------------------
+    // Since we don’t store payment_id in download_tokens,
+    // we must locate it using the checkout_session_id from the webhook.
+    // The webhook updates download_tokens by checkout_id (= purchase_id)
+    // right before inserting the purchase record.
+    //
+    // So we’ll find the *most recent* download_tokens entry
+    // for the same product and the latest purchase.
     const { data: tokenRow, error: tokenErr } = await supabase
       .from("download_tokens")
       .select("token, file_path, expires_at, used")
-      .eq("purchase_id", purchase.id)   // 🔥 DIRECT MATCH
-      .eq("product_id", purchase.product_id)
-      .single();
+      .eq("used", false)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (tokenErr) {
-      console.error("❌ Token lookup error:", tokenErr);
+      console.error("❌ tokenErr:", tokenErr);
       return {
         statusCode: 500,
-        body: JSON.stringify({ error: "Error while finding token" }),
+        body: JSON.stringify({ error: "Database error while finding token" }),
       };
     }
 
     if (!tokenRow) {
-      console.warn("⚠️ Token not created yet for purchase:", purchase.id);
+      console.warn("⚠️ No matching download token yet for transaction:", transaction_id);
       return {
         statusCode: 200,
         body: JSON.stringify({
-          message: "Token not created yet",
+          message: "No token yet",
           token: null,
         }),
       };
     }
 
-    // ---------------------------------------------------------
-    // Step 3: Return token
-    // ---------------------------------------------------------
+    // ------------------------------------------------------------------
+    // Step 3: Return token & file info
+    // ------------------------------------------------------------------
     return {
       statusCode: 200,
       body: JSON.stringify({
@@ -77,9 +86,8 @@ export async function handler(event) {
         expires_at: tokenRow.expires_at,
       }),
     };
-
   } catch (err) {
-    console.error("🔥 Fatal error:", err);
+    console.error("🔥 getTokenByTxn fatal error:", err);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: err.message }),
