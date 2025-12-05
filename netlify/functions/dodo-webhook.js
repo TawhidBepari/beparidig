@@ -23,7 +23,7 @@ export async function handler(event) {
       return { statusCode: 405, body: 'Method Not Allowed' };
     }
 
-    // optional signature verification
+    // signature verification (optional)
     try {
       const signature = event.headers['x-dodo-signature'];
       if (process.env.DODO_WEBHOOK_SECRET && signature) {
@@ -37,7 +37,7 @@ export async function handler(event) {
         }
       }
     } catch (sigErr) {
-      console.warn('Signature check error:', sigErr);
+      console.warn('Signature check error (continuing if not configured):', sigErr);
     }
 
     const body = JSON.parse(event.body || '{}');
@@ -54,36 +54,26 @@ export async function handler(event) {
       return { statusCode: 200, body: 'Ignored non-success event' };
     }
 
+    // normalize fields
     const email = data.customer?.email || null;
     const order_id = data.payment_id || data.id || null;
     const checkout_id = data.checkout_session_id || data.session_id || null;
     const dodo_product_id = data.product_cart?.[0]?.product_id || data.product_id || null;
 
-    // FIXED: Convert settlement_amount 1199 → 11.99
+    // Convert settlement_amount minor->major (e.g., 1199 -> 11.99)
     const settlementRaw = data.settlement_amount ?? null;
     const settlementCurrency = data.settlement_currency ?? 'USD';
     const amountMajor = Number(toMajorAmount(settlementRaw).toFixed(2));
 
+    // referral code
     const metadata = data.metadata || {};
     const rawReferral =
-      metadata?.referral_code ??
-      metadata?.referral_id ??
-      metadata?.ref ??
-      metadata?.affiliate ??
-      null;
-
+      metadata?.referral_code ?? metadata?.referral_id ?? metadata?.ref ?? metadata?.affiliate ?? null;
     const referralCode =
-      rawReferral && typeof rawReferral === 'string' && rawReferral.trim() !== ''
-        ? rawReferral.trim()
-        : null;
+      rawReferral && typeof rawReferral === 'string' && rawReferral.trim() !== '' ? rawReferral.trim() : null;
 
     if (!email || !order_id || !checkout_id || !dodo_product_id) {
-      console.error('❌ Missing required fields', {
-        email,
-        order_id,
-        checkout_id,
-        dodo_product_id
-      });
+      console.error('❌ Missing required fields', { email, order_id, checkout_id, dodo_product_id });
       return { statusCode: 400, body: 'Missing required fields' };
     }
 
@@ -99,87 +89,111 @@ export async function handler(event) {
       return { statusCode: 404, body: 'Product not found' };
     }
 
-    // =============================
-    // INSERT PURCHASE (IDEMPOTENT)
-    // =============================
-    const { count: existingPurchases } = await supabase
-      .from('purchases')
-      .select('id', { head: true, count: 'exact' })
-      .eq('provider_checkout_id', checkout_id);
+    // -------------------------
+    // idempotent purchase insert (and fetch purchase UUID)
+    // -------------------------
+    // If purchase exists, fetch its UUID. Otherwise insert and return the new UUID.
+    let purchaseUuid = null;
+    try {
+      // try fetch
+      const { data: existingPurchase } = await supabase
+        .from('purchases')
+        .select('id, provider_checkout_id')
+        .eq('provider_checkout_id', checkout_id)
+        .maybeSingle();
 
-    if (existingPurchases === 0) {
-      const { error: purchaseErr } = await supabase.from('purchases').insert({
-        email,
-        provider: 'dodo',
-        provider_order_id: order_id,
-        provider_checkout_id: checkout_id,
-        product_id: product.id,
-        amount: amountMajor, // FIXED VALUE
-        currency: 'USD',
-        fulfilled: true
-      });
+      if (existingPurchase && existingPurchase.id) {
+        purchaseUuid = existingPurchase.id;
+        console.log('ℹ️ Found existing purchase UUID:', purchaseUuid);
+      } else {
+        // insert and return id
+        const { data: newPurchase, error: purchaseErr } = await supabase
+          .from('purchases')
+          .insert({
+            email,
+            provider: 'dodo',
+            provider_order_id: order_id,
+            provider_checkout_id: checkout_id,
+            product_id: product.id,
+            amount: amountMajor,
+            currency: 'USD',
+            fulfilled: true
+          })
+          .select('id')
+          .maybeSingle();
 
-      if (purchaseErr) {
-        console.error('❌ purchase insert error', purchaseErr);
-        return { statusCode: 500, body: 'Failed to record purchase' };
+        if (purchaseErr || !newPurchase) {
+          console.error('❌ purchase insert error', purchaseErr);
+          return { statusCode: 500, body: 'Failed to record purchase' };
+        }
+        purchaseUuid = newPurchase.id;
+        console.log(`✅ Purchase recorded: ${email} | ${amountMajor} USD | uuid=${purchaseUuid}`);
       }
-
-      console.log(`✅ Purchase recorded: ${email} | ${amountMajor} USD`);
-    } else {
-      console.log('ℹ️ Purchase already exists:', checkout_id);
+    } catch (err) {
+      console.error('🔥 Error handling purchase insert/fetch:', err);
+      return { statusCode: 500, body: 'Purchase handling failed' };
     }
 
-    // =============================
-    // DOWNLOAD TOKEN (UPSERT)
-    // =============================
+    // -------------------------
+    // DOWNLOAD TOKEN (UPSERT) using purchaseUuid
+    // -------------------------
     const newToken = crypto.randomUUID();
     const expires_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-    const { count: existingTokenCount } = await supabase
-      .from('download_tokens')
-      .select('id', { head: true, count: 'exact' })
-      .eq('purchase_id', checkout_id);
-
-    if (existingTokenCount > 0) {
-      await supabase
+    try {
+      const { count: existingTokenCount } = await supabase
         .from('download_tokens')
-        .update({
-          token: newToken,
-          file_path: product.file_path,
-          expires_at,
-          used: false,
-          product_id: product.id
-        })
-        .eq('purchase_id', checkout_id);
+        .select('id', { head: true, count: 'exact' })
+        .eq('purchase_id', purchaseUuid);
 
-      console.log('🔄 Updated existing download token');
-    } else {
-      await supabase.from('download_tokens').insert({
-        token: newToken,
-        purchase_id: checkout_id,
-        product_id: product.id,
-        file_path: product.file_path,
-        expires_at,
-        used: false
-      });
+      if (existingTokenCount > 0) {
+        const { error: tokenUpdateErr } = await supabase
+          .from('download_tokens')
+          .update({
+            token: newToken,
+            file_path: product.file_path,
+            expires_at,
+            used: false,
+            product_id: product.id
+          })
+          .eq('purchase_id', purchaseUuid);
 
-      console.log('✅ Created new download token');
+        if (tokenUpdateErr) console.error('⚠️ Token update failed:', tokenUpdateErr);
+        else console.log('🔄 Updated existing download token for purchase UUID', purchaseUuid);
+      } else {
+        const { error: tokenInsertErr } = await supabase
+          .from('download_tokens')
+          .insert({
+            token: newToken,
+            purchase_id: purchaseUuid,
+            product_id: product.id,
+            file_path: product.file_path,
+            expires_at,
+            used: false
+          });
+
+        if (tokenInsertErr) console.error('⚠️ Token insert failed:', tokenInsertErr);
+        else console.log('✅ Created download token for purchase UUID', purchaseUuid);
+      }
+    } catch (err) {
+      console.error('🔥 Download token error:', err);
+      // don't abort — tokens shouldn't break entire flow
     }
 
-    // =============================
-    // AFFILIATE COMMISSION
-    // =============================
+    // -------------------------
+    // AFFILIATE COMMISSION (store purchase_uuid)
+    // -------------------------
     if (referralCode) {
       console.log('🔎 Referral detected:', referralCode);
 
-      const { data: affiliate } = await supabase
+      const { data: affiliate, error: affErr } = await supabase
         .from('affiliates')
         .select('id, name')
         .eq('code', referralCode)
         .maybeSingle();
 
-      if (!affiliate) {
-        console.warn('⚠️ Affiliate not found:', referralCode);
+      if (affErr || !affiliate) {
+        console.warn('⚠️ Affiliate not found for code:', referralCode);
       } else {
         const rate =
           product.affiliate_rate && Number(product.affiliate_rate) > 0
@@ -188,29 +202,36 @@ export async function handler(event) {
 
         const commissionAmount = Number((amountMajor * rate).toFixed(2));
 
-        const { count: existingComm } = await supabase
-          .from('affiliate_commissions')
-          .select('id', { head: true, count: 'exact' })
-          .eq('affiliate_id', affiliate.id)
-          .eq('purchase_id', checkout_id);
+        try {
+          const { count: existingComm } = await supabase
+            .from('affiliate_commissions')
+            .select('id', { head: true, count: 'exact' })
+            .eq('affiliate_id', affiliate.id)
+            .eq('purchase_id', purchaseUuid);
 
-        if (existingComm > 0) {
-          console.log('⏭️ Commission already exists — skipping');
-        } else {
-          await supabase.from('affiliate_commissions').insert({
-            affiliate_id: affiliate.id,
-            affiliate_name: affiliate.name,
-            purchase_id: checkout_id,
-            product_id: product.id,
-            amount: commissionAmount, // FIXED VALUE
-            currency: 'USD',
-            status: 'pending',
-            referral_id: referralCode,
-            source: 'dodo-webhook',
-            created_at: new Date().toISOString()
-          });
+          if (existingComm > 0) {
+            console.log('⏭️ Commission already exists for affiliate+purchase — skipping');
+          } else {
+            const { error: affInsertErr } = await supabase
+              .from('affiliate_commissions')
+              .insert({
+                affiliate_id: affiliate.id,
+                affiliate_name: affiliate.name,
+                purchase_id: purchaseUuid,
+                product_id: product.id,
+                amount: commissionAmount,
+                currency: 'USD',
+                status: 'pending',
+                referral_id: referralCode,
+                source: 'dodo-webhook',
+                created_at: new Date().toISOString()
+              });
 
-          console.log(`💸 Recorded commission ${commissionAmount} USD`);
+            if (affInsertErr) console.error('⚠️ Failed to insert affiliate commission:', affInsertErr);
+            else console.log(`💸 Recorded commission ${commissionAmount} USD for affiliate ${affiliate.name}`);
+          }
+        } catch (err) {
+          console.error('🔥 Affiliate commission error:', err);
         }
       }
     } else {
