@@ -12,72 +12,64 @@ export async function handler(event) {
       return { statusCode: 405, body: 'Method not allowed' };
     }
 
-    const token = event.queryStringParameters?.token || null;
+    const token = event.queryStringParameters?.token;
     if (!token) {
-      console.error('❌ Missing token in request');
-      return {
-        statusCode: 400,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ success: false, message: 'Missing token' }),
-      };
+      return { statusCode: 400, body: 'Missing token' };
     }
 
-    console.log(`🔍 Checking token: ${token}`);
-
-    const { data, error: selectError } = await supabase
+    // 1️⃣ Get token record
+    const { data: record, error } = await supabase
       .from('download_tokens')
-      .select('file_path, expires_at, used')
+      .select('id, file_path, expires_at, used')
       .eq('token', token)
-      .maybeSingle();
+      .single();
 
-    if (selectError) {
-      console.error('❌ Supabase select error:', selectError);
-      return {
-        statusCode: 500,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ success: false, message: 'DB error' }),
-      };
+    if (error || !record) {
+      return { statusCode: 404, body: 'Invalid token' };
     }
 
-    if (!data) {
-      console.warn('⚠️ Invalid token — no matching row found.');
-      return {
-        statusCode: 404,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ success: false, message: 'Invalid token' }),
-      };
+    if (record.used) {
+      return { statusCode: 410, body: 'Token already used' };
     }
 
-    const now = new Date();
-    const expiresAt = new Date(data.expires_at);
-
-    if (now > expiresAt) {
-      console.warn(`⚠️ Token expired at ${expiresAt.toISOString()}`);
-      return {
-        statusCode: 410,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ success: false, message: 'Token expired' }),
-      };
+    if (new Date() > new Date(record.expires_at)) {
+      return { statusCode: 410, body: 'Token expired' };
     }
 
-    const fileUrl = `${process.env.SITE_URL || 'https://beparidig.netlify.app'}/${data.file_path}`;
-    console.log(`✅ Token validated successfully. File: ${fileUrl}`);
+    // 2️⃣ Mark token as used immediately
+    await supabase
+      .from('download_tokens')
+      .update({ used: true })
+      .eq('id', record.id);
 
+    // 3️⃣ Fetch file from PRIVATE Supabase Storage
+    // file_path example: products/50-ai-prompts.pdf
+    const bucket = 'products';
+
+    const { data: file, error: downloadError } =
+      await supabase.storage.from(bucket).download(record.file_path);
+
+    if (downloadError) {
+      return { statusCode: 500, body: 'File download failed' };
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const filename = record.file_path.split('/').pop();
+
+    // 4️⃣ Stream file to browser (forced download)
     return {
       statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        success: true,
-        file: fileUrl,
-        expires_at: expiresAt.toISOString(),
-      }),
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Cache-Control': 'no-store',
+      },
+      body: buffer.toString('base64'),
+      isBase64Encoded: true,
     };
+
   } catch (err) {
-    console.error('🔥 validateToken fatal error:', err);
-    return {
-      statusCode: 500,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ success: false, message: 'Server error' }),
-    };
+    console.error('validateToken error:', err);
+    return { statusCode: 500, body: 'Server error' };
   }
 }
