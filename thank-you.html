@@ -4,17 +4,36 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Thank You — BEPARI DIG</title>
+
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css"/>
+
   <style>
     .small { color:#666; font-size:0.95rem; }
-    .cta { background:#007b55; color:#fff; padding:10px 18px; border-radius:6px; text-decoration:none; display:inline-block; }
+    .cta {
+      background:#007b55;
+      color:#fff;
+      padding:12px 22px;
+      border-radius:6px;
+      text-decoration:none;
+      display:inline-block;
+      border:none;
+      cursor:pointer;
+      font-size:1rem;
+    }
+    .cta:disabled {
+      background:#999;
+      cursor:not-allowed;
+    }
     .muted { color:#777; font-size:0.9rem; }
   </style>
 </head>
+
 <body>
   <header class="site-header">
-    <div class="wrap header-inner"><div class="brand">BEPARI DIG</div></div>
+    <div class="wrap header-inner">
+      <div class="brand">BEPARI DIG</div>
+    </div>
   </header>
 
   <main class="wrap">
@@ -25,12 +44,17 @@
     </section>
   </main>
 
-  <footer class="footer"><div class="wrap"><p class="small">© 2025 BEPARI DIG</p></div></footer>
+  <footer class="footer">
+    <div class="wrap">
+      <p class="small">© 2025 BEPARI DIG</p>
+    </div>
+  </footer>
 
-  <script>
+<script>
 document.addEventListener("DOMContentLoaded", async () => {
   const content = document.getElementById("content");
   const params = new URLSearchParams(window.location.search);
+
   const token = params.get("token");
   const payment_id = params.get("payment_id");
   const purchase_id = params.get("purchase_id");
@@ -39,95 +63,127 @@ document.addEventListener("DOMContentLoaded", async () => {
     content.innerHTML = `<h2>${title}</h2><p class="small">${html}</p>`;
   }
 
-  async function wait(ms) {
-    return new Promise((r) => setTimeout(r, ms));
+  function sleep(ms) {
+    return new Promise(r => setTimeout(r, ms));
   }
 
-  async function validateAndRender(tokenValue) {
-    const v = await fetch(`/.netlify/functions/validateToken?token=${encodeURIComponent(tokenValue)}`);
-    const vjson = await v.json();
+  async function renderDownload(tokenValue) {
+    const res = await fetch(
+      `/.netlify/functions/validateToken?token=${encodeURIComponent(tokenValue)}`
+    );
 
-    if (vjson.success && vjson.file) {
-      const expiresAt = new Date(vjson.expires_at);
-      const expiryHuman = expiresAt.toLocaleString();
+    const data = await res.json();
 
-      content.innerHTML = `
-        <h2>Thank you for your purchase!</h2>
-        <p class="muted">Your download is ready. Click below to access your file.</p>
-        <p style="margin-top:18px;">
-          <button id="downloadBtn" class="cta">Access your file</button>
-        </p>
-        <p class="small" style="margin-top:12px;">This link will expire at <strong>${expiryHuman}</strong>.</p>
-        <p class="small" style="margin-top:8px;">If you have trouble, contact support at <a href="mailto:support@beparidig.com">support@beparidig.com</a>.</p>
-      `;
-
-      document.getElementById("downloadBtn").addEventListener("click", () => {
-        const btn = document.getElementById("downloadBtn");
-        btn.disabled = true;
-        btn.textContent = "Preparing download...";
-        window.location.href = vjson.file;
-        setTimeout(() => {
-          btn.textContent = "Download started";
-        }, 2000);
-      });
-    } else {
-      showMessage("Download not ready", "We couldn’t validate your download yet. Please refresh this page in a few seconds.");
+    if (!data.success) {
+      showMessage(
+        "Download unavailable",
+        "This download link is invalid or has expired. If you believe this is a mistake, please contact <a href='mailto:support@beparidig.com'>support@beparidig.com</a>."
+      );
+      return;
     }
+
+    const expiry = new Date(data.expires_at).toLocaleString();
+
+    content.innerHTML = `
+      <h2>Thank you for your purchase!</h2>
+      <p class="muted">Your secure download is ready.</p>
+
+      <p style="margin-top:22px;">
+        <button id="downloadBtn" class="cta">Access your file</button>
+      </p>
+
+      <p class="small" style="margin-top:14px;">
+        This link will expire at <strong>${expiry}</strong>.
+      </p>
+
+      <p class="small" style="margin-top:8px;">
+        Need help? Contact
+        <a href="mailto:support@beparidig.com">support@beparidig.com</a>
+      </p>
+    `;
+
+    const btn = document.getElementById("downloadBtn");
+
+    btn.addEventListener("click", () => {
+      btn.disabled = true;
+      btn.textContent = "Preparing download…";
+
+      // 🔒 Secure download (NO file URL exposed)
+      window.location.href =
+        `/.netlify/functions/downloadFile?token=${encodeURIComponent(tokenValue)}`;
+
+      setTimeout(() => {
+        btn.textContent = "Download started";
+      }, 2000);
+    });
   }
 
   try {
-    // ✅ 1. Direct token
+    // 1️⃣ Direct token
     if (token) {
-      await validateAndRender(token);
+      await renderDownload(token);
       return;
     }
 
-    // ✅ 2. Payment ID fallback
+    // 2️⃣ Payment ID fallback
     if (payment_id) {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const res = await fetch(`/.netlify/functions/getTokenByTxn?transaction_id=${encodeURIComponent(payment_id)}`);
-        const data = await res.json();
+      for (let i = 0; i < 3; i++) {
+        const r = await fetch(
+          `/.netlify/functions/getTokenByTxn?transaction_id=${encodeURIComponent(payment_id)}`
+        );
+        const j = await r.json();
 
-        if (data.token) {
-          window.location.href = `/thank-you?token=${data.token}`;
+        if (j.token) {
+          window.location.replace(`/thank-you?token=${j.token}`);
           return;
         }
-
-        await wait(3000); // wait 3s for webhook delay
+        await sleep(3000);
       }
 
-      showMessage("Verifying your payment…", "Your payment was received, but the download link isn’t ready yet. Please refresh after a few seconds.");
+      showMessage(
+        "Verifying your payment…",
+        "Your payment was successful, but the download link is still being prepared. Please refresh this page shortly."
+      );
       return;
     }
 
-    // ✅ 3. Purchase/session ID fallback (new)
+    // 3️⃣ Purchase/session ID fallback
     if (purchase_id) {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const res = await fetch(`/.netlify/functions/getTokenByTxn?transaction_id=${encodeURIComponent(purchase_id)}`);
-        const data = await res.json();
+      for (let i = 0; i < 3; i++) {
+        const r = await fetch(
+          `/.netlify/functions/getTokenByTxn?transaction_id=${encodeURIComponent(purchase_id)}`
+        );
+        const j = await r.json();
 
-        if (data.token) {
-          window.location.href = `/thank-you?token=${data.token}`;
+        if (j.token) {
+          window.location.replace(`/thank-you?token=${j.token}`);
           return;
         }
-
-        await wait(3000);
+        await sleep(3000);
       }
 
-      showMessage("Preparing your download…", "We’re still processing your order. Please refresh in a few seconds.");
+      showMessage(
+        "Preparing your download…",
+        "Your order is confirmed, but your download isn’t ready yet. Please refresh this page in a moment."
+      );
       return;
     }
 
-    // ❌ No identifiers
+    // ❌ Nothing usable
     showMessage(
-      "Missing download link",
-      'We couldn’t detect your download information. Please check your purchase confirmation or contact <a href="mailto:support@beparidig.com">support@beparidig.com</a>.'
+      "Missing download information",
+      "We couldn’t detect your purchase. Please check your confirmation email or contact <a href='mailto:support@beparidig.com'>support@beparidig.com</a>."
     );
+
   } catch (err) {
     console.error(err);
-    showMessage("Server error", "We couldn’t reach the download service. Please try again later or contact support.");
+    showMessage(
+      "Server error",
+      "We couldn’t reach the download service. Please try again later or contact support."
+    );
   }
 });
 </script>
+
 </body>
 </html>
