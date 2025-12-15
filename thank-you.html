@@ -15,8 +15,6 @@
       color:#fff;
       padding:12px 22px;
       border-radius:6px;
-      text-decoration:none;
-      display:inline-block;
       border:none;
       cursor:pointer;
       font-size:1rem;
@@ -39,8 +37,8 @@
   <main class="wrap">
     <section class="card" id="content" style="text-align:center; padding:48px;">
       <h2>Preparing your download…</h2>
-      <p class="small" id="sub">Please wait while we prepare your file.</p>
-      <div id="spinner" style="margin-top:18px;">⏳ Setting up your download…</div>
+      <p class="small">Please wait while we verify your purchase.</p>
+      <div style="margin-top:18px;">⏳</div>
     </section>
   </main>
 
@@ -67,22 +65,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     return new Promise(r => setTimeout(r, ms));
   }
 
-  async function renderDownload(tokenValue) {
+  async function renderDownload(validToken) {
     const res = await fetch(
-      `/.netlify/functions/validateToken?token=${encodeURIComponent(tokenValue)}`
+      `/.netlify/functions/validateToken?token=${encodeURIComponent(validToken)}`
     );
 
     const data = await res.json();
 
-    if (!data.success) {
+    if (!res.ok || !data.success || !data.downloadUrl) {
       showMessage(
         "Download unavailable",
-        "This download link is invalid or has expired. If you believe this is a mistake, please contact <a href='mailto:support@beparidig.com'>support@beparidig.com</a>."
+        "This download link is invalid or has expired. Please contact <a href='mailto:support@beparidig.com'>support@beparidig.com</a>."
       );
       return;
     }
-
-    const expiry = new Date(data.expires_at).toLocaleString();
 
     content.innerHTML = `
       <h2>Thank you for your purchase!</h2>
@@ -92,34 +88,27 @@ document.addEventListener("DOMContentLoaded", async () => {
         <button id="downloadBtn" class="cta">Access your file</button>
       </p>
 
-      <p class="small" style="margin-top:14px;">
-        This link will expire at <strong>${expiry}</strong>.
+      <p class="small" style="margin-top:10px;">
+        This link can only be used once.
       </p>
 
       <p class="small" style="margin-top:8px;">
-        Need help? Contact
-        <a href="mailto:support@beparidig.com">support@beparidig.com</a>
+        Need help? <a href="mailto:support@beparidig.com">Contact support</a>
       </p>
     `;
 
     const btn = document.getElementById("downloadBtn");
-
     btn.addEventListener("click", () => {
       btn.disabled = true;
-      btn.textContent = "Preparing download…";
+      btn.textContent = "Starting download…";
 
-      // 🔒 Secure download (NO file URL exposed)
-      window.location.href =
-        `/.netlify/functions/downloadFile?token=${encodeURIComponent(tokenValue)}`;
-
-      setTimeout(() => {
-        btn.textContent = "Download started";
-      }, 2000);
+      // ✅ Final secure redirect
+      window.location.href = data.downloadUrl;
     });
   }
 
   try {
-    // 1️⃣ Direct token
+    // 1️⃣ Token already present
     if (token) {
       await renderDownload(token);
       return;
@@ -139,12 +128,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         await sleep(3000);
       }
-
-      showMessage(
-        "Verifying your payment…",
-        "Your payment was successful, but the download link is still being prepared. Please refresh this page shortly."
-      );
-      return;
     }
 
     // 3️⃣ Purchase/session ID fallback
@@ -161,18 +144,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         await sleep(3000);
       }
-
-      showMessage(
-        "Preparing your download…",
-        "Your order is confirmed, but your download isn’t ready yet. Please refresh this page in a moment."
-      );
-      return;
     }
 
-    // ❌ Nothing usable
     showMessage(
-      "Missing download information",
-      "We couldn’t detect your purchase. Please check your confirmation email or contact <a href='mailto:support@beparidig.com'>support@beparidig.com</a>."
+      "Preparing your download…",
+      "Your payment was successful. Please refresh this page in a moment if your download doesn’t appear."
     );
 
   } catch (err) {
