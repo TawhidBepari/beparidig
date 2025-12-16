@@ -1,12 +1,17 @@
 import { createClient } from '@supabase/supabase-js'
 
+// ✅ FIXED: correct environment variable name
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  process.env.SUPABASE_SERVICE_KEY
 )
 
 export async function handler(event) {
   try {
+    if (event.httpMethod !== 'GET') {
+      return { statusCode: 405, body: 'Method not allowed' }
+    }
+
     const token = event.queryStringParameters?.token
     if (!token) {
       return { statusCode: 400, body: 'Missing token' }
@@ -37,13 +42,14 @@ export async function handler(event) {
       return { statusCode: 403, body: 'Token already used' }
     }
 
-    // 3️⃣ Download file from private bucket
+    // 3️⃣ Download file from PRIVATE bucket
     const { data: file, error: fileError } = await supabase
       .storage
       .from('Products')
       .download(tokenRow.file_path)
 
     if (fileError || !file) {
+      console.error('Storage error:', fileError)
       return { statusCode: 404, body: 'File not found' }
     }
 
@@ -65,7 +71,7 @@ export async function handler(event) {
     }
 
   } catch (err) {
-    console.error('downloadFile error:', err)
+    console.error('download-file fatal error:', err)
     return { statusCode: 500, body: 'Server error' }
   }
 }
