@@ -1,30 +1,25 @@
 import { createClient } from "@supabase/supabase-js";
 
-// ✅ Use the EXISTING Netlify env var
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+  process.env.SUPABASE_SERVICE_KEY // ✅ matches your Netlify env var
 );
 
 export async function handler(event) {
   try {
-    if (event.httpMethod !== "GET") {
-      return json(405, { error: "Method not allowed" });
-    }
-
     const token = event.queryStringParameters?.token;
 
     if (!token) {
-      return json(400, { error: "Missing token" });
+      return json(400, { success: false, error: "Missing token" });
     }
 
     const { data: tokenRow, error } = await supabase
       .from("download_tokens")
-      .select("token, expires_at")
+      .select("expires_at")
       .eq("token", token)
       .eq("used", false)
       .gt("expires_at", new Date().toISOString())
-      .single();
+      .maybeSingle();
 
     if (error || !tokenRow) {
       return json(403, { success: false });
@@ -32,8 +27,7 @@ export async function handler(event) {
 
     return json(200, {
       success: true,
-      expires_at: tokenRow.expires_at,
-      downloadUrl: `/.netlify/functions/download-file?token=${token}`,
+      expires_at: tokenRow.expires_at
     });
 
   } catch (err) {
@@ -47,8 +41,8 @@ function json(statusCode, body) {
     statusCode,
     headers: {
       "Content-Type": "application/json",
-      "Cache-Control": "no-store",
+      "Cache-Control": "no-store"
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(body)
   };
 }
