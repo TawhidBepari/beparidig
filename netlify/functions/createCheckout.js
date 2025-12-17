@@ -35,7 +35,7 @@ export async function handler(event) {
     // ✅ Build checkout payload for Dodo
     const checkoutPayload = {
       product_cart: [{ product_id, quantity: 1 }],
-      return_url: "https://beparidig.netlify.app/thank-you?purchase_id={SESSION_ID}",
+      return_url: "https://beparidig.netlify.app/thank-you?checkout_id={SESSION_ID}",
       cancel_url: "https://beparidig.netlify.app",
     };
 
