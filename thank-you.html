@@ -1,29 +1,38 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Thank You — BEPARI DIG</title>
 
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="style.css" />
 
   <style>
-    .small { color:#666; font-size:0.95rem; }
+    body {
+      font-family: "Source Sans 3", sans-serif;
+    }
+    .small {
+      color: #666;
+      font-size: 0.95rem;
+    }
+    .muted {
+      color: #777;
+      font-size: 0.9rem;
+    }
     .cta {
-      background:#007b55;
-      color:#fff;
-      padding:12px 22px;
-      border-radius:6px;
-      border:none;
-      cursor:pointer;
-      font-size:1rem;
+      background: #007b55;
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
     }
     .cta:disabled {
-      background:#999;
-      cursor:not-allowed;
+      background: #999;
+      cursor: not-allowed;
     }
-    .muted { color:#777; font-size:0.9rem; }
   </style>
 </head>
 
@@ -49,43 +58,56 @@
   </footer>
 
 <script>
-document.addEventListener("DOMContentLoaded", async () => {
+document.addEventListener("DOMContentLoaded", () => {
   const content = document.getElementById("content");
   const params = new URLSearchParams(window.location.search);
 
-  const token = params.get("token");
-  const payment_id = params.get("payment_id");
-  const purchase_id = params.get("purchase_id");
+  // ✅ ONLY ID WE USE
+  const checkoutId = params.get("checkout_id");
 
-  function showMessage(title, html) {
+  function show(title, html) {
     content.innerHTML = `<h2>${title}</h2><p class="small">${html}</p>`;
   }
 
   function sleep(ms) {
-    return new Promise(r => setTimeout(r, ms));
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  async function renderDownload(validToken) {
-    const res = await fetch(
-      `/.netlify/functions/validateToken?token=${encodeURIComponent(validToken)}`
-    );
+  async function pollForToken() {
+    for (let attempt = 1; attempt <= 6; attempt++) {
+      try {
+        const res = await fetch(
+          `/.netlify/functions/getTokenByCheckout?checkout_id=${encodeURIComponent(checkoutId)}`,
+          { cache: "no-store" }
+        );
 
-    const data = await res.json();
+        const data = await res.json();
 
-    if (!res.ok || !data.success || !data.downloadUrl) {
-      showMessage(
-        "Download unavailable",
-        "This download link is invalid or has expired. Please contact <a href='mailto:support@beparidig.com'>support@beparidig.com</a>."
-      );
-      return;
+        if (data?.token) {
+          renderDownload(data.token);
+          return;
+        }
+
+      } catch (err) {
+        console.error("Polling error:", err);
+      }
+
+      await sleep(3000);
     }
 
+    show(
+      "Preparing your download…",
+      "Your payment was successful. Please refresh this page in a moment if your download doesn’t appear."
+    );
+  }
+
+  function renderDownload(token) {
     content.innerHTML = `
       <h2>Thank you for your purchase!</h2>
       <p class="muted">Your secure download is ready.</p>
 
       <p style="margin-top:22px;">
-        <button id="downloadBtn" class="cta">Access your file</button>
+        <button id="downloadBtn" class="cta">Download your file</button>
       </p>
 
       <p class="small" style="margin-top:10px;">
@@ -97,67 +119,23 @@ document.addEventListener("DOMContentLoaded", async () => {
       </p>
     `;
 
-    const btn = document.getElementById("downloadBtn");
-    btn.addEventListener("click", () => {
-      btn.disabled = true;
-      btn.textContent = "Starting download…";
-
-      // ✅ Final secure redirect
-      window.location.href = data.downloadUrl;
+    document.getElementById("downloadBtn").addEventListener("click", () => {
+      window.location.href =
+        `/.netlify/functions/download-file?token=${encodeURIComponent(token)}`;
     });
   }
 
-  try {
-    // 1️⃣ Token already present
-    if (token) {
-      await renderDownload(token);
-      return;
-    }
-
-    // 2️⃣ Payment ID fallback
-    if (payment_id) {
-      for (let i = 0; i < 3; i++) {
-        const r = await fetch(
-          `/.netlify/functions/getTokenByTxn?transaction_id=${encodeURIComponent(payment_id)}`
-        );
-        const j = await r.json();
-
-        if (j.token) {
-          window.location.replace(`/thank-you?token=${j.token}`);
-          return;
-        }
-        await sleep(3000);
-      }
-    }
-
-    // 3️⃣ Purchase/session ID fallback
-    if (purchase_id) {
-      for (let i = 0; i < 3; i++) {
-        const r = await fetch(
-          `/.netlify/functions/getTokenByTxn?transaction_id=${encodeURIComponent(purchase_id)}`
-        );
-        const j = await r.json();
-
-        if (j.token) {
-          window.location.replace(`/thank-you?token=${j.token}`);
-          return;
-        }
-        await sleep(3000);
-      }
-    }
-
-    showMessage(
-      "Preparing your download…",
-      "Your payment was successful. Please refresh this page in a moment if your download doesn’t appear."
+  // 🚨 Hard stop if missing checkout_id
+  if (!checkoutId) {
+    show(
+      "Invalid link",
+      "This page was accessed incorrectly. Please check your email or contact <a href='mailto:support@beparidig.com'>support@beparidig.com</a>."
     );
-
-  } catch (err) {
-    console.error(err);
-    showMessage(
-      "Server error",
-      "We couldn’t reach the download service. Please try again later or contact support."
-    );
+    return;
   }
+
+  // 🚀 Start polling
+  pollForToken();
 });
 </script>
 
