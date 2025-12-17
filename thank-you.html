@@ -1,143 +1,64 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Thank You — BEPARI DIG</title>
-
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css" />
-
-  <style>
-    body {
-      font-family: "Source Sans 3", sans-serif;
-    }
-    .small {
-      color: #666;
-      font-size: 0.95rem;
-    }
-    .muted {
-      color: #777;
-      font-size: 0.9rem;
-    }
-    .cta {
-      background: #007b55;
-      color: #fff;
-      padding: 12px 24px;
-      border-radius: 6px;
-      border: none;
-      cursor: pointer;
-      font-size: 1rem;
-    }
-    .cta:disabled {
-      background: #999;
-      cursor: not-allowed;
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Thank You — BEPARI DIG</title>
+<link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-  <header class="site-header">
-    <div class="wrap header-inner">
-      <div class="brand">BEPARI DIG</div>
-    </div>
-  </header>
-
-  <main class="wrap">
-    <section class="card" id="content" style="text-align:center; padding:48px;">
-      <h2>Preparing your download…</h2>
-      <p class="small">Please wait while we verify your purchase.</p>
-      <div style="margin-top:18px;">⏳</div>
-    </section>
-  </main>
-
-  <footer class="footer">
-    <div class="wrap">
-      <p class="small">© 2025 BEPARI DIG</p>
-    </div>
-  </footer>
+<main class="wrap">
+  <section id="content" class="card" style="text-align:center;padding:48px">
+    <h2>Preparing your download…</h2>
+    <p>Please wait while we verify your purchase.</p>
+  </section>
+</main>
 
 <script>
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   const content = document.getElementById("content");
-  const params = new URLSearchParams(window.location.search);
+  const checkoutId = localStorage.getItem("last_checkout_id");
 
-  // ✅ ONLY ID WE USE
-  const checkoutId = params.get("checkout_id");
-
-  function show(title, html) {
-    content.innerHTML = `<h2>${title}</h2><p class="small">${html}</p>`;
-  }
-
-  function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  async function pollForToken() {
-    for (let attempt = 1; attempt <= 6; attempt++) {
-      try {
-        const res = await fetch(
-          `/.netlify/functions/getTokenByCheckout?checkout_id=${encodeURIComponent(checkoutId)}`,
-          { cache: "no-store" }
-        );
-
-        const data = await res.json();
-
-        if (data?.token) {
-          renderDownload(data.token);
-          return;
-        }
-
-      } catch (err) {
-        console.error("Polling error:", err);
-      }
-
-      await sleep(3000);
-    }
-
-    show(
-      "Preparing your download…",
-      "Your payment was successful. Please refresh this page in a moment if your download doesn’t appear."
-    );
-  }
-
-  function renderDownload(token) {
-    content.innerHTML = `
-      <h2>Thank you for your purchase!</h2>
-      <p class="muted">Your secure download is ready.</p>
-
-      <p style="margin-top:22px;">
-        <button id="downloadBtn" class="cta">Download your file</button>
-      </p>
-
-      <p class="small" style="margin-top:10px;">
-        This link can only be used once.
-      </p>
-
-      <p class="small" style="margin-top:8px;">
-        Need help? <a href="mailto:support@beparidig.com">Contact support</a>
-      </p>
-    `;
-
-    document.getElementById("downloadBtn").addEventListener("click", () => {
-      window.location.href =
-        `/.netlify/functions/download-file?token=${encodeURIComponent(token)}`;
-    });
-  }
-
-  // 🚨 Hard stop if missing checkout_id
   if (!checkoutId) {
-    show(
-      "Invalid link",
-      "This page was accessed incorrectly. Please check your email or contact <a href='mailto:support@beparidig.com'>support@beparidig.com</a>."
-    );
+    content.innerHTML = "<h2>Invalid access</h2><p>Please contact support.</p>";
     return;
   }
 
-  // 🚀 Start polling
-  pollForToken();
+  async function sleep(ms) {
+    return new Promise(r => setTimeout(r, ms));
+  }
+
+  for (let i = 0; i < 8; i++) {
+    try {
+      const res = await fetch(
+        `/.netlify/functions/getTokenByCheckout?checkout_id=${encodeURIComponent(checkoutId)}`,
+        { cache: "no-store" }
+      );
+
+      const data = await res.json();
+
+      if (data.token) {
+        content.innerHTML = `
+          <h2>Thank you for your purchase!</h2>
+          <p>Your download is ready.</p>
+          <button id="download">Download file</button>
+        `;
+
+        document.getElementById("download").onclick = () => {
+          window.location.href =
+            "/.netlify/functions/download-file?token=" + encodeURIComponent(data.token);
+        };
+        return;
+      }
+    } catch (e) {}
+
+    await sleep(3000);
+  }
+
+  content.innerHTML =
+    "<h2>Almost there…</h2><p>Please refresh this page in a moment.</p>";
 });
 </script>
-
 </body>
 </html>
