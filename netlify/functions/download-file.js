@@ -1,77 +1,58 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from "@supabase/supabase-js";
 
-// ✅ FIXED: correct environment variable name
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
-)
+);
 
 export async function handler(event) {
   try {
-    if (event.httpMethod !== 'GET') {
-      return { statusCode: 405, body: 'Method not allowed' }
-    }
+    const token = event.queryStringParameters?.token;
+    if (!token) return { statusCode: 400, body: "Missing token" };
 
-    const token = event.queryStringParameters?.token
-    if (!token) {
-      return { statusCode: 400, body: 'Missing token' }
-    }
-
-    // 1️⃣ Fetch token safely
     const { data: tokenRow, error } = await supabase
-      .from('download_tokens')
-      .select('*')
-      .eq('token', token)
-      .eq('used', false)
-      .gt('expires_at', new Date().toISOString())
-      .maybeSingle()
+      .from("download_tokens")
+      .select("*")
+      .eq("token", token)
+      .eq("used", false)
+      .gt("expires_at", new Date().toISOString())
+      .maybeSingle();
 
     if (error || !tokenRow) {
-      return { statusCode: 403, body: 'Invalid or expired token' }
+      return { statusCode: 403, body: "Invalid or expired token" };
     }
 
-    // 2️⃣ Atomically mark token as used
-    const { error: updateError, count } = await supabase
-      .from('download_tokens')
-      .update({ used: true })
-      .eq('token', token)
-      .eq('used', false)
-      .select('id', { count: 'exact' })
-
-    if (updateError || count !== 1) {
-      return { statusCode: 403, body: 'Token already used' }
-    }
-
-    // 3️⃣ Download file from PRIVATE bucket
     const { data: file, error: fileError } = await supabase
       .storage
-      .from('Products')
-      .download(tokenRow.file_path)
+      .from("Products")
+      .download(tokenRow.file_path);
 
     if (fileError || !file) {
-      console.error('Storage error:', fileError)
-      return { statusCode: 404, body: 'File not found' }
+      return { statusCode: 404, body: "File not found" };
     }
 
-    // 4️⃣ Convert to buffer
-    const buffer = Buffer.from(await file.arrayBuffer())
-    const filename = tokenRow.file_path.split('/').pop()
+    // ✅ mark used ONLY after file is fetched
+    await supabase
+      .from("download_tokens")
+      .update({ used: true })
+      .eq("id", tokenRow.id);
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const filename = tokenRow.file_path.split("/").pop();
 
     return {
       statusCode: 200,
       headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-        'Cache-Control': 'no-store',
-        'X-Content-Type-Options': 'nosniff',
-        'Referrer-Policy': 'no-referrer'
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Cache-Control": "no-store"
       },
-      body: buffer.toString('base64'),
+      body: buffer.toString("base64"),
       isBase64Encoded: true
-    }
+    };
 
   } catch (err) {
-    console.error('download-file fatal error:', err)
-    return { statusCode: 500, body: 'Server error' }
+    console.error("download-file error:", err);
+    return { statusCode: 500, body: "Server error" };
   }
 }
