@@ -1,6 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
 
-// ✅ Initialize Supabase client (still useful for future extensions)
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
@@ -9,83 +8,52 @@ const supabase = createClient(
 export async function handler(event) {
   try {
     if (event.httpMethod !== "POST") {
-      return {
-        statusCode: 405,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "Method not allowed" }),
-      };
+      return { statusCode: 405, body: "Method Not Allowed" };
     }
 
     const body = JSON.parse(event.body || "{}");
-
-    // ✅ Extract product_id and optional affiliate referral code
     const product_id = body.product_id || "pdt_2QXXpIv3PY3vC8qzG4QO7";
-    const referral_code = body.referral_id || body.ref || null;
+    const referral_code = body.referral_id || null;
 
     const apiKey = process.env.DODO_API_KEY;
-    const baseUrl =
-      process.env.DODO_API_BASE || "https://test.dodopayments.com/v1";
+    const baseUrl = process.env.DODO_API_BASE || "https://test.dodopayments.com/v1";
 
-    console.log("🛒 Creating Dodo checkout:", {
-      product_id,
-      referral_code,
-      baseUrl,
-    });
-
-    // ✅ Build checkout payload for Dodo
-    const checkoutPayload = {
+    const payload = {
       product_cart: [{ product_id, quantity: 1 }],
-      return_url: "https://beparidig.netlify.app/thank-you?checkout_id={SESSION_ID}",
-      cancel_url: "https://beparidig.netlify.app",
+      return_url: "https://beparidig.netlify.app/thank-you.html",
+      cancel_url: "https://beparidig.netlify.app"
     };
 
-    // ✅ Attach referral code to metadata (used later by webhook)
     if (referral_code) {
-      checkoutPayload.metadata = { referral_code };
+      payload.metadata = { referral_code };
     }
 
-    // ✅ Create checkout via Dodo API
-    const response = await fetch(`${baseUrl}/checkouts`, {
+    const res = await fetch(`${baseUrl}/checkouts`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiKey}`
       },
-      body: JSON.stringify(checkoutPayload),
+      body: JSON.stringify(payload)
     });
 
-    const data = await response.json();
-    console.log("🧾 Dodo API response:", data);
+    const data = await res.json();
 
-    const checkoutId = data.session_id;
-    const checkoutUrl = data.checkout_url;
-
-    if (!response.ok || !checkoutId || !checkoutUrl) {
-      console.error("❌ Failed to create checkout:", data);
-      return {
-        statusCode: 500,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          error: "Failed to create checkout",
-          details: data,
-        }),
-      };
+    if (!res.ok || !data.session_id || !data.checkout_url) {
+      console.error("Dodo error:", data);
+      return { statusCode: 500, body: "Checkout creation failed" };
     }
 
-    // ✅ SUCCESS — return checkout URL to frontend
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        checkout_url: checkoutUrl,
-      }),
+        checkout_url: data.checkout_url,
+        checkout_id: data.session_id
+      })
     };
   } catch (err) {
-    console.error("🔥 createCheckout fatal error:", err);
-    return {
-      statusCode: 500,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Server error" }),
-    };
+    console.error("createCheckout error:", err);
+    return { statusCode: 500, body: "Server error" };
   }
 }
