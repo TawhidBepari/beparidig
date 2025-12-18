@@ -21,13 +21,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   const checkoutId = localStorage.getItem("last_checkout_id");
 
   if (!checkoutId) {
-    content.innerHTML = "<h2>Invalid access</h2><p>Please contact support.</p>";
+    content.innerHTML =
+      "<h2>Invalid access</h2><p>Please contact support.</p>";
     return;
   }
 
-  async function sleep(ms) {
-    return new Promise(r => setTimeout(r, ms));
-  }
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   for (let i = 0; i < 8; i++) {
     try {
@@ -35,23 +34,23 @@ document.addEventListener("DOMContentLoaded", async () => {
         `/.netlify/functions/getTokenByCheckout?checkout_id=${encodeURIComponent(checkoutId)}`,
         { cache: "no-store" }
       );
-
       const data = await res.json();
 
       if (data.token) {
         content.innerHTML = `
           <h2>Thank you for your purchase!</h2>
-          <p>Your download is ready.</p>
+          <p>Your secure download is ready.</p>
           <button id="download">Download file</button>
         `;
 
         document.getElementById("download").onclick = () => {
           window.location.href =
-            "/.netlify/functions/download-file?token=" + encodeURIComponent(data.token);
+            "/.netlify/functions/download-file?token=" +
+            encodeURIComponent(data.token);
         };
         return;
       }
-    } catch (e) {}
+    } catch {}
 
     await sleep(3000);
   }
