@@ -8,8 +8,11 @@ const supabase = createClient(
 export async function handler(event) {
   try {
     const token = event.queryStringParameters?.token;
-    if (!token) return { statusCode: 400, body: "Missing token" };
+    if (!token) {
+      return { statusCode: 400, body: "Missing token" };
+    }
 
+    // 1️⃣ Validate token
     const { data: tokenRow, error } = await supabase
       .from("download_tokens")
       .select("*")
@@ -22,6 +25,7 @@ export async function handler(event) {
       return { statusCode: 403, body: "Invalid or expired token" };
     }
 
+    // 2️⃣ Fetch file FIRST
     const { data: file, error: fileError } = await supabase
       .storage
       .from("Products")
@@ -31,7 +35,7 @@ export async function handler(event) {
       return { statusCode: 404, body: "File not found" };
     }
 
-    // ✅ mark used ONLY after file is fetched
+    // 3️⃣ Mark token as used (FOREVER)
     await supabase
       .from("download_tokens")
       .update({ used: true })
@@ -50,7 +54,6 @@ export async function handler(event) {
       body: buffer.toString("base64"),
       isBase64Encoded: true
     };
-
   } catch (err) {
     console.error("download-file error:", err);
     return { statusCode: 500, body: "Server error" };
