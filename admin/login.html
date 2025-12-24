@@ -1,45 +1,141 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Admin Login — BEPARI DIG</title>
-  <link rel="stylesheet" href="/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Login — BepariDig</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #0f0f0f;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+
+    .login-box {
+      background: #1a1a1a;
+      padding: 28px;
+      border-radius: 14px;
+      width: 360px;
+      box-shadow: 0 0 18px rgba(0, 0, 0, 0.4);
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 18px;
+    }
+
+    label {
+      display: block;
+      margin-top: 12px;
+      margin-bottom: 4px;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #333;
+      background: #0f0f0f;
+      color: #fff;
+    }
+
+    button {
+      width: 100%;
+      margin-top: 16px;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+      background: #4caf50;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .error {
+      margin-top: 10px;
+      color: #ff6b6b;
+      font-size: 0.9rem;
+      display: none;
+    }
+
+    .success {
+      margin-top: 10px;
+      color: #6dff9c;
+      font-size: 0.9rem;
+      display: none;
+    }
+  </style>
 </head>
 
 <body>
-  <main class="wrap card" style="max-width:420px;margin:60px auto;padding:32px;">
+  <div class="login-box">
     <h2>Admin Login</h2>
 
-    <p id="msg" style="color:#c33;"></p>
+    <form id="adminLoginForm">
+      <label>Email</label>
+      <input type="email" id="email" required />
 
-    <input id="email" type="email" placeholder="Email" style="width:100%;margin-top:12px;">
-    <input id="password" type="password" placeholder="Password" style="width:100%;margin-top:12px;">
+      <label>Password</label>
+      <input type="password" id="password" required />
 
-    <button id="loginBtn" class="cta" style="margin-top:18px;width:100%;">
-      Sign in
-    </button>
-  </main>
+      <button type="submit" id="loginBtn">Login</button>
 
-<script>
-document.getElementById("loginBtn").onclick = async () => {
-  const email = email.value.trim();
-  const password = password.value.trim();
-  msg.textContent = "";
+      <div id="errorMsg" class="error"></div>
+      <div id="successMsg" class="success">Login successful — redirecting…</div>
+    </form>
+  </div>
 
-  const res = await fetch("/.netlify/functions/admin-login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password })
-  });
+  <script>
+    const form = document.getElementById("adminLoginForm");
+    const btn = document.getElementById("loginBtn");
+    const errorMsg = document.getElementById("errorMsg");
+    const successMsg = document.getElementById("successMsg");
 
-  const data = await res.json();
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
 
-  if (data.success) {
-    window.location.href = "/admin/";
-  } else {
-    msg.textContent = data.error || "Login failed";
-  }
-};
-</script>
+      errorMsg.style.display = "none";
+      successMsg.style.display = "none";
+
+      btn.disabled = true;
+      btn.textContent = "Checking…";
+
+      const res = await fetch("/.netlify/functions/admin-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: document.getElementById("email").value.trim(),
+          password: document.getElementById("password").value
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        btn.disabled = false;
+        btn.textContent = "Login";
+
+        errorMsg.textContent = data.message || "Login failed";
+        errorMsg.style.display = "block";
+        return;
+      }
+
+      successMsg.style.display = "block";
+
+      setTimeout(() => {
+        window.location.href = "/admin/dashboard.html";
+      }, 900);
+    });
+  </script>
 </body>
 </html>
