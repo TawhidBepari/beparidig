@@ -18,11 +18,12 @@ export async function handler(event) {
     if (!email || !password) {
       return {
         statusCode: 400,
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ success: false, message: "Missing credentials" })
       };
     }
 
-    // 1️⃣ Look up admin
+    // lookup admin
     const { data: admin, error } = await supabase
       .from("admins")
       .select("id, email, password_hash")
@@ -32,24 +33,24 @@ export async function handler(event) {
     if (error || !admin) {
       return {
         statusCode: 401,
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ success: false, message: "Invalid login" })
       };
     }
 
-    // 2️⃣ Check password hash
-    const ok = await bcrypt.compare(password, admin.password_hash);
+    const valid = await bcrypt.compare(password, admin.password_hash);
 
-    if (!ok) {
+    if (!valid) {
       return {
         statusCode: 401,
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ success: false, message: "Invalid login" })
       };
     }
 
-    // 3️⃣ Create secure session token
+    // create session token
     const token = crypto.randomBytes(32).toString("hex");
-
-    const expires_at = new Date(Date.now() + 1000 * 60 * 60 * 8).toISOString(); // 8 hours
+    const expires_at = new Date(Date.now() + 1000 * 60 * 60 * 8).toISOString(); // 8h
 
     await supabase.from("admin_sessions").insert({
       admin_id: admin.id,
@@ -59,6 +60,7 @@ export async function handler(event) {
 
     return {
       statusCode: 200,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         success: true,
         token
@@ -70,6 +72,7 @@ export async function handler(event) {
 
     return {
       statusCode: 500,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ success: false, message: "Server error" })
     };
   }
