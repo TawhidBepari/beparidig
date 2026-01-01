@@ -96,20 +96,21 @@
   </div>
 
   <script>
-    const form = document.getElementById("adminLoginForm");
-    const btn = document.getElementById("loginBtn");
-    const errorMsg = document.getElementById("errorMsg");
-    const successMsg = document.getElementById("successMsg");
+  const form = document.getElementById("adminLoginForm");
+  const btn = document.getElementById("loginBtn");
+  const errorMsg = document.getElementById("errorMsg");
+  const successMsg = document.getElementById("successMsg");
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
 
-      errorMsg.style.display = "none";
-      successMsg.style.display = "none";
+    errorMsg.style.display = "none";
+    successMsg.style.display = "none";
 
-      btn.disabled = true;
-      btn.textContent = "Checking…";
+    btn.disabled = true;
+    btn.textContent = "Checking…";
 
+    try {
       const res = await fetch("/.netlify/functions/admin-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -121,21 +122,28 @@
 
       const data = await res.json();
 
-      if (!res.ok || !data.success) {
-        btn.disabled = false;
-        btn.textContent = "Login";
-
-        errorMsg.textContent = data.message || "Login failed";
-        errorMsg.style.display = "block";
-        return;
+      if (!res.ok || !data.success || !data.token) {
+        throw new Error(data.message || "Invalid credentials");
       }
+
+      // ✅ Store session token securely
+      localStorage.setItem("admin_token", data.token);
 
       successMsg.style.display = "block";
 
+      // redirect to dashboard
       setTimeout(() => {
         window.location.href = "/admin/dashboard.html";
       }, 900);
-    });
-  </script>
+
+    } catch (err) {
+      errorMsg.textContent = err.message || "Login failed";
+      errorMsg.style.display = "block";
+
+      btn.disabled = false;
+      btn.textContent = "Login";
+    }
+  });
+</script>
 </body>
 </html>
