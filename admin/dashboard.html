@@ -1,30 +1,105 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Admin Dashboard — BEPARI DIG</title>
-  <link rel="stylesheet" href="/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard — BepariDig</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #0f0f0f;
+      color: #fff;
+      margin: 0;
+      padding: 40px;
+    }
+
+    .card {
+      background: #1a1a1a;
+      border-radius: 14px;
+      padding: 24px;
+      max-width: 700px;
+      margin: auto;
+      box-shadow: 0 0 18px rgba(0,0,0,0.4);
+    }
+
+    h1 {
+      margin-top: 0;
+    }
+
+    .muted {
+      color: #aaa;
+      font-size: 0.9rem;
+    }
+
+    .logout {
+      margin-top: 24px;
+      background: #ff5c5c;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+  </style>
 </head>
 
 <body>
-  <main class="wrap">
-    <section class="card" style="padding:32px">
+  <div class="card" id="app">
+    <h1>Checking session…</h1>
+    <p class="muted">Please wait</p>
+  </div>
 
-      <h2>Admin Dashboard</h2>
+<script>
+(async () => {
+  const app = document.getElementById("app");
 
-      <p>Logged in as: <strong id="adminUser">Checking…</strong></p>
+  // 1️⃣ Read token from localStorage
+  const token = localStorage.getItem("admin_session_token");
 
-      <button id="logout">Logout</button>
+  if (!token) {
+    window.location.href = "/admin/login.html";
+    return;
+  }
 
-      <hr style="margin:24px 0">
+  try {
+    // 2️⃣ Verify session with backend
+    const res = await fetch(
+      "/.netlify/functions/admin-verify-session?token=" + encodeURIComponent(token),
+      { cache: "no-store" }
+    );
 
-      <div id="dashboardContent">
-        <p>Dashboard loaded.</p>
-      </div>
+    const data = await res.json();
 
-    </section>
-  </main>
+    if (!res.ok || !data.valid) {
+      localStorage.removeItem("admin_session_token");
+      window.location.href = "/admin/login.html";
+      return;
+    }
 
-  <script src="dashboard.js"></script>
+    // 3️⃣ Session valid → render dashboard
+    app.innerHTML = `
+      <h1>Admin Dashboard</h1>
+      <p class="muted">Logged in as ${data.admin_email}</p>
+
+      <hr style="margin:20px 0;border-color:#333">
+
+      <p>✅ Admin access confirmed.</p>
+      <p>Next: product management, uploads, analytics.</p>
+
+      <button class="logout" id="logoutBtn">Log out</button>
+    `;
+
+    document.getElementById("logoutBtn").onclick = () => {
+      localStorage.removeItem("admin_session_token");
+      window.location.href = "/admin/login.html";
+    };
+
+  } catch (err) {
+    console.error(err);
+    window.location.href = "/admin/login.html";
+  }
+})();
+</script>
 </body>
 </html>
