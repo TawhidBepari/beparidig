@@ -15,7 +15,12 @@ export async function handler(event) {
 
     const { email, password } = JSON.parse(event.body || "{}");
 
+    console.log("Incoming login attempt");
+    console.log("Email received:", email);
+    console.log("Password received:", password);
+
     if (!email || !password) {
+      console.log("Missing credentials");
       return {
         statusCode: 400,
         headers: { "Content-Type": "application/json" },
@@ -30,17 +35,26 @@ export async function handler(event) {
       .eq("email", email)
       .maybeSingle();
 
+    console.log("Admin lookup result:", admin);
+    console.log("Lookup error:", error);
+
     if (error || !admin) {
+      console.log("Admin not found");
       return {
         statusCode: 401,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ success: false, message: "Invalid login" })
       };
     }
+
+    console.log("Stored hash:", admin.password_hash);
 
     const valid = await bcrypt.compare(password, admin.password_hash);
 
+    console.log("Password match result:", valid);
+
     if (!valid) {
+      console.log("Password mismatch");
       return {
         statusCode: 401,
         headers: { "Content-Type": "application/json" },
@@ -48,15 +62,21 @@ export async function handler(event) {
       };
     }
 
+    console.log("Password valid. Creating session...");
+
     // create session token
     const token = crypto.randomBytes(32).toString("hex");
-    const expires_at = new Date(Date.now() + 1000 * 60 * 60 * 8).toISOString(); // 8h
+    const expires_at = new Date(Date.now() + 1000 * 60 * 60 * 8).toISOString();
 
-    await supabase.from("admin_sessions").insert({
-      admin_id: admin.id,
-      token,
-      expires_at
-    });
+    const { error: sessionError } = await supabase
+      .from("admin_sessions")
+      .insert({
+        admin_id: admin.id,
+        token,
+        expires_at
+      });
+
+    console.log("Session insert error:", sessionError);
 
     return {
       statusCode: 200,
@@ -68,7 +88,7 @@ export async function handler(event) {
     };
 
   } catch (err) {
-    console.error("admin-login error:", err);
+    console.error("admin-login fatal error:", err);
 
     return {
       statusCode: 500,
