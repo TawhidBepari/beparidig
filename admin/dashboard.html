@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Admin Dashboard — BepariDig</title>
 
   <style>
@@ -18,13 +18,38 @@
       background: #1a1a1a;
       border-radius: 14px;
       padding: 24px;
-      max-width: 700px;
+      max-width: 800px;
       margin: auto;
       box-shadow: 0 0 18px rgba(0,0,0,0.4);
     }
 
-    h1 {
-      margin-top: 0;
+    input, textarea {
+      width: 100%;
+      margin-top: 6px;
+      margin-bottom: 12px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #333;
+      background: #0f0f0f;
+      color: #fff;
+    }
+
+    button {
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .primary {
+      background: #4caf50;
+      width: 100%;
+    }
+
+    .logout {
+      margin-top: 20px;
+      background: #ff5c5c;
     }
 
     .muted {
@@ -32,30 +57,29 @@
       font-size: 0.9rem;
     }
 
-    .logout {
-      margin-top: 24px;
-      background: #ff5c5c;
-      border: none;
-      padding: 10px 16px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: 600;
+    .success {
+      color: #6dff9c;
+      display: none;
+    }
+
+    .error {
+      color: #ff6b6b;
+      display: none;
     }
   </style>
 </head>
 
 <body>
-  <div class="card" id="app">
-    <h1>Checking session…</h1>
-    <p class="muted">Please wait</p>
-  </div>
+<div class="card" id="app">
+  <h1>Checking session…</h1>
+</div>
 
 <script>
 (async () => {
   const app = document.getElementById("app");
 
-  // 1️⃣ Read token from localStorage
-  const token = localStorage.getItem("admin_session_token");
+  // ✅ IMPORTANT: match login.html
+  const token = localStorage.getItem("admin_token");
 
   if (!token) {
     window.location.href = "/admin/login.html";
@@ -63,7 +87,6 @@
   }
 
   try {
-    // 2️⃣ Verify session with backend
     const res = await fetch(
       "/.netlify/functions/admin-verify-session?token=" + encodeURIComponent(token),
       { cache: "no-store" }
@@ -72,28 +95,104 @@
     const data = await res.json();
 
     if (!res.ok || !data.valid) {
-      localStorage.removeItem("admin_session_token");
+      localStorage.removeItem("admin_token");
       window.location.href = "/admin/login.html";
       return;
     }
 
-    // 3️⃣ Session valid → render dashboard
+    // ✅ DASHBOARD UI
     app.innerHTML = `
       <h1>Admin Dashboard</h1>
       <p class="muted">Logged in as ${data.admin_email}</p>
 
       <hr style="margin:20px 0;border-color:#333">
 
-      <p>✅ Admin access confirmed.</p>
-      <p>Next: product management, uploads, analytics.</p>
+      <h2>Add Product</h2>
+
+      <form id="productForm">
+        <label>Name</label>
+        <input id="name" required />
+
+        <label>Slug (url-friendly)</label>
+        <input id="slug" required />
+
+        <label>Price</label>
+        <input id="price" type="number" step="0.01" required />
+
+        <label>Currency</label>
+        <input id="currency" value="USD" />
+
+        <label>Description</label>
+        <textarea id="description"></textarea>
+
+        <label>File Path (Supabase storage path)</label>
+        <input id="file_path" />
+
+        <label>Cover Image URL</label>
+        <input id="cover_image" />
+
+        <label>Dodo Product ID (optional)</label>
+        <input id="dodo_product_id" />
+
+        <button class="primary" type="submit">Create Product</button>
+
+        <p class="success" id="successMsg">✅ Product created</p>
+        <p class="error" id="errorMsg"></p>
+      </form>
 
       <button class="logout" id="logoutBtn">Log out</button>
     `;
 
+    // ✅ LOGOUT
     document.getElementById("logoutBtn").onclick = () => {
-      localStorage.removeItem("admin_session_token");
+      localStorage.removeItem("admin_token");
       window.location.href = "/admin/login.html";
     };
+
+    // ✅ CREATE PRODUCT
+    const form = document.getElementById("productForm");
+    const successMsg = document.getElementById("successMsg");
+    const errorMsg = document.getElementById("errorMsg");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      successMsg.style.display = "none";
+      errorMsg.style.display = "none";
+
+      try {
+        const res = await fetch("/.netlify/functions/admin-create-product", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token
+          },
+          body: JSON.stringify({
+            name: document.getElementById("name").value,
+            slug: document.getElementById("slug").value,
+            price: parseFloat(document.getElementById("price").value),
+            currency: document.getElementById("currency").value,
+            description: document.getElementById("description").value,
+            file_path: document.getElementById("file_path").value,
+            cover_image: document.getElementById("cover_image").value,
+            dodo_product_id: document.getElementById("dodo_product_id").value
+          })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.message || "Failed to create product");
+        }
+
+        successMsg.style.display = "block";
+        form.reset();
+
+      } catch (err) {
+        errorMsg.textContent = err.message;
+        errorMsg.style.display = "block";
+      }
+    });
 
   } catch (err) {
     console.error(err);
