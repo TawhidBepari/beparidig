@@ -96,57 +96,57 @@
   </div>
 
   <script>
-const form = document.getElementById("adminLoginForm");
-const btn = document.getElementById("loginBtn");
-const errorMsg = document.getElementById("errorMsg");
-const successMsg = document.getElementById("successMsg");
+    const form = document.getElementById("adminLoginForm");
+    const btn = document.getElementById("loginBtn");
+    const errorMsg = document.getElementById("errorMsg");
+    const successMsg = document.getElementById("successMsg");
 
-form.addEventListener("submit", async (e) => {
-  e.preventDefault();
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
 
-  errorMsg.style.display = "none";
-  successMsg.style.display = "none";
+      errorMsg.style.display = "none";
+      successMsg.style.display = "none";
 
-  btn.disabled = true;
-  btn.textContent = "Checking…";
+      btn.disabled = true;
+      btn.textContent = "Checking…";
 
-  try {
-    const res = await fetch("/.netlify/functions/admin-login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: document.getElementById("email").value.trim(),
-        password: document.getElementById("password").value
-      })
+      try {
+        const res = await fetch("/.netlify/functions/admin-login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: document.getElementById("email").value.trim(),
+            password: document.getElementById("password").value
+          })
+        });
+
+        const data = await res.json();
+
+        console.log("LOGIN RESPONSE:", data);
+
+        if (!res.ok || !data.success || !data.token) {
+          throw new Error(data.message || "Invalid credentials");
+        }
+
+        // ✅ Correct token key (matches dashboard)
+        localStorage.setItem("admin_token", String(data.token));
+
+        console.log("TOKEN SAVED:", localStorage.getItem("admin_token"));
+
+        successMsg.style.display = "block";
+
+        setTimeout(() => {
+          window.location.href = "/admin/dashboard.html";
+        }, 1000);
+
+      } catch (err) {
+        errorMsg.textContent = err.message || "Login failed";
+        errorMsg.style.display = "block";
+
+        btn.disabled = false;
+        btn.textContent = "Login";
+      }
     });
-
-    const data = await res.json();
-
-    console.log("LOGIN RESPONSE:", data); // 👈 DEBUG
-
-    if (!res.ok || !data.success || !data.token) {
-      throw new Error(data.message || "Invalid credentials");
-    }
-
-    // ✅ FORCE SAVE TOKEN (clean)
-    localStorage.setItem("admin_token", String(data.token));
-
-    console.log("TOKEN SAVED:", localStorage.getItem("admin_token")); // 👈 DEBUG
-
-    successMsg.style.display = "block";
-
-    setTimeout(() => {
-      window.location.href = "/admin/dashboard.html";
-    }, 1000);
-
-  } catch (err) {
-    errorMsg.textContent = err.message || "Login failed";
-    errorMsg.style.display = "block";
-
-    btn.disabled = false;
-    btn.textContent = "Login";
-  }
-});
-</script>
+  </script>
 </body>
 </html>
