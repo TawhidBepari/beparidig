@@ -23,7 +23,7 @@
       box-shadow: 0 0 18px rgba(0,0,0,0.4);
     }
 
-    input, textarea {
+    input, textarea, select {
       width: 100%;
       margin-top: 6px;
       margin-bottom: 12px;
@@ -77,8 +77,6 @@
 <script>
 (async () => {
   const app = document.getElementById("app");
-
-  // ✅ IMPORTANT: match login.html
   const token = localStorage.getItem("admin_token");
 
   if (!token) {
@@ -100,7 +98,6 @@
       return;
     }
 
-    // ✅ DASHBOARD UI
     app.innerHTML = `
       <h1>Admin Dashboard</h1>
       <p class="muted">Logged in as ${data.admin_email}</p>
@@ -113,7 +110,7 @@
         <label>Name</label>
         <input id="name" required />
 
-        <label>Slug (url-friendly)</label>
+        <label>Slug</label>
         <input id="slug" required />
 
         <label>Price</label>
@@ -125,13 +122,13 @@
         <label>Description</label>
         <textarea id="description"></textarea>
 
-        <label>File Path (Supabase storage path)</label>
+        <label>File Path</label>
         <input id="file_path" />
 
-        <label>Cover Image URL</label>
+        <label>Cover Image</label>
         <input id="cover_image" />
 
-        <label>Dodo Product ID (optional)</label>
+        <label>Dodo Product ID</label>
         <input id="dodo_product_id" />
 
         <button class="primary" type="submit">Create Product</button>
@@ -140,16 +137,42 @@
         <p class="error" id="errorMsg"></p>
       </form>
 
+      <hr style="margin:40px 0;border-color:#333">
+
+      <h2>Create Installment Plan</h2>
+
+      <form id="installmentForm">
+        <label>Product</label>
+        <select id="plan_product" required></select>
+
+        <label>Plan Name</label>
+        <input id="plan_name" required />
+
+        <label>Number of Installments</label>
+        <input id="plan_count" type="number" required />
+
+        <label>Price per Installment</label>
+        <input id="plan_price" type="number" step="0.01" required />
+
+        <label>Intervals (days)</label>
+        <input id="plan_intervals" placeholder="0,15,30" required />
+
+        <button class="primary" type="submit">Create Plan</button>
+
+        <p class="success" id="planSuccess">✅ Plan created</p>
+        <p class="error" id="planError"></p>
+      </form>
+
       <button class="logout" id="logoutBtn">Log out</button>
     `;
 
-    // ✅ LOGOUT
+    // LOGOUT
     document.getElementById("logoutBtn").onclick = () => {
       localStorage.removeItem("admin_token");
       window.location.href = "/admin/login.html";
     };
 
-    // ✅ CREATE PRODUCT
+    // CREATE PRODUCT
     const form = document.getElementById("productForm");
     const successMsg = document.getElementById("successMsg");
     const errorMsg = document.getElementById("errorMsg");
@@ -182,7 +205,7 @@
         const data = await res.json();
 
         if (!res.ok || !data.success) {
-          throw new Error(data.message || "Failed to create product");
+          throw new Error(data.message || "Failed");
         }
 
         successMsg.style.display = "block";
@@ -194,8 +217,77 @@
       }
     });
 
+    // LOAD PRODUCTS
+    async function loadProducts() {
+      const res = await fetch("/.netlify/functions/admin-get-products", {
+        headers: {
+          "Authorization": "Bearer " + token
+        }
+      });
+
+      const products = await res.json();
+
+      const select = document.getElementById("plan_product");
+      select.innerHTML = "";
+
+      products.forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.name;
+        select.appendChild(opt);
+      });
+    }
+
+    loadProducts();
+
+    // CREATE PLAN
+    const planForm = document.getElementById("installmentForm");
+    const planSuccess = document.getElementById("planSuccess");
+    const planError = document.getElementById("planError");
+
+    planForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      planSuccess.style.display = "none";
+      planError.style.display = "none";
+
+      try {
+        const intervals = document
+          .getElementById("plan_intervals")
+          .value.split(",")
+          .map(n => parseInt(n.trim()));
+
+        const res = await fetch("/.netlify/functions/admin-create-installment-plan", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token
+          },
+          body: JSON.stringify({
+            product_id: document.getElementById("plan_product").value,
+            name: document.getElementById("plan_name").value,
+            installments_count: parseInt(document.getElementById("plan_count").value),
+            installment_price: parseFloat(document.getElementById("plan_price").value),
+            intervals
+          })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.message || "Failed");
+        }
+
+        planSuccess.style.display = "block";
+        planForm.reset();
+
+      } catch (err) {
+        planError.textContent = err.message;
+        planError.style.display = "block";
+      }
+    });
+
   } catch (err) {
-    console.error(err);
     window.location.href = "/admin/login.html";
   }
 })();
