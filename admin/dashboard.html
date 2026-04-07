@@ -139,6 +139,11 @@
 
       <hr style="margin:40px 0;border-color:#333">
 
+      <h2>Your Products</h2>
+      <div id="productList"></div>
+
+      <hr style="margin:40px 0;border-color:#333">
+
       <h2>Create Installment Plan</h2>
 
       <form id="installmentForm">
@@ -166,7 +171,6 @@
       <button class="logout" id="logoutBtn">Log out</button>
     `;
 
-    // LOGOUT
     document.getElementById("logoutBtn").onclick = () => {
       localStorage.removeItem("admin_token");
       window.location.href = "/admin/login.html";
@@ -204,29 +208,26 @@
 
         const data = await res.json();
 
-        if (!res.ok || !data.success) {
-          throw new Error(data.message || "Failed");
-        }
+        if (!res.ok || !data.success) throw new Error();
 
         successMsg.style.display = "block";
         form.reset();
+        loadProducts();
+        loadProductList();
 
-      } catch (err) {
-        errorMsg.textContent = err.message;
+      } catch {
+        errorMsg.textContent = "Failed";
         errorMsg.style.display = "block";
       }
     });
 
-    // LOAD PRODUCTS
+    // LOAD PRODUCTS (dropdown)
     async function loadProducts() {
       const res = await fetch("/.netlify/functions/admin-get-products", {
-        headers: {
-          "Authorization": "Bearer " + token
-        }
+        headers: { "Authorization": "Bearer " + token }
       });
 
       const products = await res.json();
-
       const select = document.getElementById("plan_product");
       select.innerHTML = "";
 
@@ -238,56 +239,90 @@
       });
     }
 
+    // LOAD PRODUCT LIST
+    async function loadProductList() {
+      const res = await fetch("/.netlify/functions/admin-get-products", {
+        headers: { "Authorization": "Bearer " + token }
+      });
+
+      const products = await res.json();
+      const container = document.getElementById("productList");
+      container.innerHTML = "";
+
+      products.forEach(p => {
+        const row = document.createElement("div");
+        row.style.marginBottom = "10px";
+
+        row.innerHTML = `
+          <strong>${p.name}</strong>
+          <button data-id="${p.id}" style="margin-left:10px;background:#ff5c5c;color:#fff;padding:6px 10px;border-radius:6px;">
+            Delete
+          </button>
+        `;
+
+        container.appendChild(row);
+      });
+
+      document.querySelectorAll("#productList button").forEach(btn => {
+        btn.onclick = async () => {
+          const id = btn.getAttribute("data-id");
+
+          if (!confirm("Delete this product?")) return;
+
+          const res = await fetch("/.netlify/functions/admin-delete-product", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer " + token
+            },
+            body: JSON.stringify({ id })
+          });
+
+          const data = await res.json();
+
+          if (data.success) {
+            loadProductList();
+            loadProducts();
+          } else {
+            alert("Delete failed");
+          }
+        };
+      });
+    }
+
     loadProducts();
+    loadProductList();
 
     // CREATE PLAN
     const planForm = document.getElementById("installmentForm");
-    const planSuccess = document.getElementById("planSuccess");
-    const planError = document.getElementById("planError");
 
     planForm.addEventListener("submit", async (e) => {
       e.preventDefault();
 
-      planSuccess.style.display = "none";
-      planError.style.display = "none";
+      const intervals = document.getElementById("plan_intervals").value
+        .split(",")
+        .map(n => parseInt(n.trim()));
 
-      try {
-        const intervals = document
-          .getElementById("plan_intervals")
-          .value.split(",")
-          .map(n => parseInt(n.trim()));
+      await fetch("/.netlify/functions/admin-create-installment-plan", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + token
+        },
+        body: JSON.stringify({
+          product_id: document.getElementById("plan_product").value,
+          name: document.getElementById("plan_name").value,
+          installments_count: parseInt(document.getElementById("plan_count").value),
+          installment_price: parseFloat(document.getElementById("plan_price").value),
+          intervals
+        })
+      });
 
-        const res = await fetch("/.netlify/functions/admin-create-installment-plan", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + token
-          },
-          body: JSON.stringify({
-            product_id: document.getElementById("plan_product").value,
-            name: document.getElementById("plan_name").value,
-            installments_count: parseInt(document.getElementById("plan_count").value),
-            installment_price: parseFloat(document.getElementById("plan_price").value),
-            intervals
-          })
-        });
-
-        const data = await res.json();
-
-        if (!res.ok || !data.success) {
-          throw new Error(data.message || "Failed");
-        }
-
-        planSuccess.style.display = "block";
-        planForm.reset();
-
-      } catch (err) {
-        planError.textContent = err.message;
-        planError.style.display = "block";
-      }
+      alert("Plan created");
+      planForm.reset();
     });
 
-  } catch (err) {
+  } catch {
     window.location.href = "/admin/login.html";
   }
 })();
