@@ -10,24 +10,31 @@ exports.handler = async (event) => {
     const token = event.headers.authorization?.replace("Bearer ", "");
 
     if (!token) {
-      return { statusCode: 401, body: "Unauthorized" };
+      return {
+        statusCode: 401,
+        body: JSON.stringify({ error: "Unauthorized" })
+      };
     }
 
-    // Verify session
-    const { data: session } = await supabase
+    // ✅ VERIFY ADMIN SESSION
+    const { data: session, error: sessionError } = await supabase
       .from("admin_sessions")
       .select("*")
       .eq("token", token)
       .single();
 
-    if (!session) {
-      return { statusCode: 401, body: "Invalid session" };
+    if (sessionError || !session) {
+      return {
+        statusCode: 401,
+        body: JSON.stringify({ error: "Invalid session" })
+      };
     }
 
+    // ✅ GET ALL PRODUCTS (no active filter)
     const { data, error } = await supabase
       .from("products")
-      .select("id, name")
-      .eq("active", true);
+      .select("id, name, active")
+      .order("created_at", { ascending: false });
 
     if (error) throw error;
 
@@ -39,7 +46,7 @@ exports.handler = async (event) => {
   } catch (err) {
     return {
       statusCode: 500,
-      body: err.message
+      body: JSON.stringify({ error: err.message })
     };
   }
 };
