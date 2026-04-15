@@ -144,6 +144,11 @@
 
       <hr style="margin:40px 0;border-color:#333">
 
+      <h2>Installment Plans</h2>
+      <div id="planList"></div>
+
+      <hr style="margin:40px 0;border-color:#333">
+
       <h2>Create Installment Plan</h2>
 
       <form id="installmentForm">
@@ -178,50 +183,33 @@
 
     // CREATE PRODUCT
     const form = document.getElementById("productForm");
-    const successMsg = document.getElementById("successMsg");
-    const errorMsg = document.getElementById("errorMsg");
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
-      successMsg.style.display = "none";
-      errorMsg.style.display = "none";
+      await fetch("/.netlify/functions/admin-create-product", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + token
+        },
+        body: JSON.stringify({
+          name: document.getElementById("name").value,
+          slug: document.getElementById("slug").value,
+          price: parseFloat(document.getElementById("price").value),
+          currency: document.getElementById("currency").value,
+          description: document.getElementById("description").value,
+          file_path: document.getElementById("file_path").value,
+          cover_image: document.getElementById("cover_image").value,
+          dodo_product_id: document.getElementById("dodo_product_id").value
+        })
+      });
 
-      try {
-        const res = await fetch("/.netlify/functions/admin-create-product", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + token
-          },
-          body: JSON.stringify({
-            name: document.getElementById("name").value,
-            slug: document.getElementById("slug").value,
-            price: parseFloat(document.getElementById("price").value),
-            currency: document.getElementById("currency").value,
-            description: document.getElementById("description").value,
-            file_path: document.getElementById("file_path").value,
-            cover_image: document.getElementById("cover_image").value,
-            dodo_product_id: document.getElementById("dodo_product_id").value
-          })
-        });
-
-        const data = await res.json();
-
-        if (!res.ok || !data.success) throw new Error();
-
-        successMsg.style.display = "block";
-        form.reset();
-        loadProducts();
-        loadProductList();
-
-      } catch {
-        errorMsg.textContent = "Failed";
-        errorMsg.style.display = "block";
-      }
+      form.reset();
+      loadProducts();
+      loadProductList();
     });
 
-    // LOAD PRODUCTS (dropdown)
     async function loadProducts() {
       const res = await fetch("/.netlify/functions/admin-get-products", {
         headers: { "Authorization": "Bearer " + token }
@@ -239,7 +227,6 @@
       });
     }
 
-    // LOAD PRODUCT LIST
     async function loadProductList() {
       const res = await fetch("/.netlify/functions/admin-get-products", {
         headers: { "Authorization": "Bearer " + token }
@@ -251,11 +238,10 @@
 
       products.forEach(p => {
         const row = document.createElement("div");
-        row.style.marginBottom = "10px";
 
         row.innerHTML = `
           <strong>${p.name}</strong>
-          <button data-id="${p.id}" style="margin-left:10px;background:#ff5c5c;color:#fff;padding:6px 10px;border-radius:6px;">
+          <button data-id="${p.id}" style="margin-left:10px;background:#ff5c5c;color:#fff;">
             Delete
           </button>
         `;
@@ -267,9 +253,7 @@
         btn.onclick = async () => {
           const id = btn.getAttribute("data-id");
 
-          if (!confirm("Delete this product?")) return;
-
-          const res = await fetch("/.netlify/functions/admin-delete-product", {
+          await fetch("/.netlify/functions/admin-delete-product", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -278,20 +262,73 @@
             body: JSON.stringify({ id })
           });
 
-          const data = await res.json();
+          loadProductList();
+          loadProducts();
+          loadPlans();
+        };
+      });
+    }
 
-          if (data.success) {
-            loadProductList();
-            loadProducts();
-          } else {
-            alert("Delete failed");
-          }
+    async function loadPlans() {
+      const [productsRes, plansRes] = await Promise.all([
+        fetch("/.netlify/functions/admin-get-products", {
+          headers: { "Authorization": "Bearer " + token }
+        }),
+        fetch("/.netlify/functions/admin-get-installment-plans", {
+          headers: { "Authorization": "Bearer " + token }
+        })
+      ]);
+
+      const products = await productsRes.json();
+      const plans = await plansRes.json();
+
+      const container = document.getElementById("planList");
+      container.innerHTML = "";
+
+      products.forEach(product => {
+        const productPlans = plans.filter(p => p.product_id === product.id);
+        if (productPlans.length === 0) return;
+
+        const block = document.createElement("div");
+        block.innerHTML = `<h3>${product.name}</h3>`;
+
+        productPlans.forEach(plan => {
+          const row = document.createElement("div");
+
+          row.innerHTML = `
+            ${plan.name} (${plan.installments_count} × $${plan.installment_price})
+            <button data-id="${plan.id}" style="margin-left:10px;background:#ff5c5c;color:#fff;">
+              Delete
+            </button>
+          `;
+
+          block.appendChild(row);
+        });
+
+        container.appendChild(block);
+      });
+
+      document.querySelectorAll("#planList button").forEach(btn => {
+        btn.onclick = async () => {
+          const id = btn.getAttribute("data-id");
+
+          await fetch("/.netlify/functions/admin-delete-installment-plan", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer " + token
+            },
+            body: JSON.stringify({ id })
+          });
+
+          loadPlans();
         };
       });
     }
 
     loadProducts();
     loadProductList();
+    loadPlans();
 
     // CREATE PLAN
     const planForm = document.getElementById("installmentForm");
@@ -318,8 +355,8 @@
         })
       });
 
-      alert("Plan created");
       planForm.reset();
+      loadPlans();
     });
 
   } catch {
