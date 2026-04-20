@@ -28,20 +28,48 @@
   </header>
 
   <main class="wrap">
-    <section class="hero" role="region" aria-label="Hero">
+    <section class="hero">
       <div class="cover card" style="padding:14px;">
         <img src="images/cover.png" alt="50 AI Prompts cover"/>
       </div>
       <div>
         <h1>50 AI Prompts to Grow Your Business in 2025</h1>
         <div class="price">$11.99</div>
+
         <p class="lead">
           Unlock practical, ready-to-use prompts for marketing, content, email outreach, lead generation, and small-business automation.
           Bite-size, tested and built to save time.
         </p>
+
         <p style="margin-top:18px;">
-          <button id="buyBtn" class="cta">Buy Now — Instant Download</button>
+          <button id="buyBtn" class="cta">Buy Now</button>
         </p>
+
+        <!-- 🔥 PAYMENT BOX -->
+        <div id="paymentBox" style="display:none; margin-top:20px; background:#1a1a1a; padding:16px; border-radius:10px;">
+          
+          <h3>Choose Payment Method</h3>
+
+          <!-- CARD -->
+          <button id="cardBtn" class="primary">Pay with Card (Instant)</button>
+
+          <hr style="margin:15px 0; border-color:#333">
+
+          <!-- PAYPAL -->
+          <h4>Pay with PayPal</h4>
+          <input id="paypalEmail" placeholder="Enter your email"/>
+          <button id="paypalBtn">Request Payment</button>
+
+          <hr style="margin:15px 0; border-color:#333">
+
+          <!-- INSTALLMENTS -->
+          <h4>Pay in Installments</h4>
+          <div id="plans"></div>
+          <input id="instEmail" placeholder="Enter your email"/>
+          <button id="installmentBtn">Start Installment Plan</button>
+
+        </div>
+
       </div>
     </section>
   </main>
@@ -57,48 +85,123 @@
     </div>
   </footer>
 
-  <!-- ✅ Affiliate Tracking + Dodo Checkout Integration -->
-  <script>
-document.addEventListener("DOMContentLoaded", () => {
-  const btn = document.getElementById("buyBtn");
-  if (!btn) return;
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
 
-  btn.addEventListener("click", async () => {
-    btn.disabled = true;
-    btn.textContent = "Redirecting…";
+  const buyBtn = document.getElementById("buyBtn");
+  const box = document.getElementById("paymentBox");
 
-    try {
-      const referral_id = localStorage.getItem("affiliate_ref");
+  // 🔴 REPLACE THIS WITH YOUR REAL VALUES
+  const PRODUCT_ID = "pdt_2QXXpIv3PY3vC8qzG4QO7";
+  const PRODUCT_SLUG = "50-ai-prompts-to-grow-your-business";
 
-      const res = await fetch("/.netlify/functions/createCheckout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          product_id: "pdt_2QXXpIv3PY3vC8qzG4QO7",
-          referral_id
-        })
-      });
+  // SHOW PAYMENT OPTIONS
+  buyBtn.onclick = () => {
+    box.style.display = "block";
+  };
 
-      const data = await res.json();
+  // ========================
+  // 💳 CARD (DODO)
+  // ========================
+  document.getElementById("cardBtn").onclick = async () => {
+    const referral_id = localStorage.getItem("affiliate_ref");
 
-      if (!data.checkout_url || !data.checkout_id) {
-        throw new Error("Invalid checkout response");
-      }
+    const res = await fetch("/.netlify/functions/createCheckout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        product_id: "pdt_2QXXpIv3PY3vC8qzG4QO7",
+        referral_id
+      })
+    });
 
-      // ✅ SAVE CHECKOUT ID
-      localStorage.setItem("last_checkout_id", data.checkout_id);
+    const data = await res.json();
 
-      // 🚀 REDIRECT TO DODO
-      window.location.href = data.checkout_url;
+    localStorage.setItem("last_checkout_id", data.checkout_id);
+    window.location.href = data.checkout_url;
+  };
 
-    } catch (err) {
-      console.error(err);
-      alert("Could not start checkout. Please try again.");
-      btn.disabled = false;
-      btn.textContent = "Buy Now — Instant Download";
+  // ========================
+  // 🅿️ PAYPAL (MANUAL)
+  // ========================
+  document.getElementById("paypalBtn").onclick = async () => {
+    const email = document.getElementById("paypalEmail").value;
+
+    if (!email) return alert("Enter your email");
+
+    await fetch("/.netlify/functions/create-installment-request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        product_id: PRODUCT_ID,
+        type: "paypal"
+      })
+    });
+
+    alert("Payment request will be sent to your email.");
+  };
+
+  // ========================
+  // 📆 LOAD INSTALLMENT PLANS
+  // ========================
+  let selectedPlan = null;
+
+  try {
+    const res = await fetch("/.netlify/functions/get-product-data?slug=" + PRODUCT_SLUG);
+    const data = await res.json();
+
+    const plansBox = document.getElementById("plans");
+
+    data.plans.forEach(plan => {
+      const div = document.createElement("div");
+
+      div.innerHTML = `
+        <label>
+          <input type="radio" name="plan" value="${plan.id}">
+          ${plan.installments_count} × $${plan.installment_price}
+        </label>
+      `;
+
+      plansBox.appendChild(div);
+    });
+
+  } catch (err) {
+    console.error("Failed to load plans", err);
+  }
+
+  document.addEventListener("change", (e) => {
+    if (e.target.name === "plan") {
+      selectedPlan = e.target.value;
     }
   });
+
+  // ========================
+  // 📆 INSTALLMENT REQUEST
+  // ========================
+  document.getElementById("installmentBtn").onclick = async () => {
+    const email = document.getElementById("instEmail").value;
+
+    if (!email || !selectedPlan) {
+      return alert("Select plan and enter email");
+    }
+
+    await fetch("/.netlify/functions/create-installment-request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        product_id: PRODUCT_ID,
+        plan_id: selectedPlan,
+        type: "installment"
+      })
+    });
+
+    alert("Installment request received.");
+  };
+
 });
 </script>
+
 </body>
 </html>
