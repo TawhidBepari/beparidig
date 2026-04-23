@@ -56,16 +56,6 @@
       color: #aaa;
       font-size: 0.9rem;
     }
-
-    .success {
-      color: #6dff9c;
-      display: none;
-    }
-
-    .error {
-      color: #ff6b6b;
-      display: none;
-    }
   </style>
 </head>
 
@@ -107,34 +97,16 @@
       <h2>Add Product</h2>
 
       <form id="productForm">
-        <label>Name</label>
-        <input id="name" required />
-
-        <label>Slug</label>
-        <input id="slug" required />
-
-        <label>Price</label>
-        <input id="price" type="number" step="0.01" required />
-
-        <label>Currency</label>
+        <input id="name" placeholder="Name" required />
+        <input id="slug" placeholder="Slug" required />
+        <input id="price" type="number" step="0.01" placeholder="Price" required />
         <input id="currency" value="USD" />
-
-        <label>Description</label>
-        <textarea id="description"></textarea>
-
-        <label>File Path</label>
-        <input id="file_path" />
-
-        <label>Cover Image</label>
-        <input id="cover_image" />
-
-        <label>Dodo Product ID</label>
-        <input id="dodo_product_id" />
+        <textarea id="description" placeholder="Description"></textarea>
+        <input id="file_path" placeholder="File Path" />
+        <input id="cover_image" placeholder="Cover Image" />
+        <input id="dodo_product_id" placeholder="Dodo Product ID" />
 
         <button class="primary" type="submit">Create Product</button>
-
-        <p class="success" id="successMsg">✅ Product created</p>
-        <p class="error" id="errorMsg"></p>
       </form>
 
       <hr style="margin:40px 0;border-color:#333">
@@ -152,26 +124,19 @@
       <h2>Create Installment Plan</h2>
 
       <form id="installmentForm">
-        <label>Product</label>
         <select id="plan_product" required></select>
-
-        <label>Plan Name</label>
-        <input id="plan_name" required />
-
-        <label>Number of Installments</label>
-        <input id="plan_count" type="number" required />
-
-        <label>Price per Installment</label>
-        <input id="plan_price" type="number" step="0.01" required />
-
-        <label>Intervals (days)</label>
+        <input id="plan_name" placeholder="Plan Name" required />
+        <input id="plan_count" type="number" placeholder="Installments count" required />
+        <input id="plan_price" type="number" step="0.01" placeholder="Price per installment" required />
         <input id="plan_intervals" placeholder="0,15,30" required />
 
         <button class="primary" type="submit">Create Plan</button>
-
-        <p class="success" id="planSuccess">✅ Plan created</p>
-        <p class="error" id="planError"></p>
       </form>
+
+      <hr style="margin:40px 0;border-color:#333">
+
+      <h2>Payment Requests</h2>
+      <div id="requestList"></div>
 
       <button class="logout" id="logoutBtn">Log out</button>
     `;
@@ -181,35 +146,7 @@
       window.location.href = "/admin/login.html";
     };
 
-    // CREATE PRODUCT
-    const form = document.getElementById("productForm");
-
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-
-      await fetch("/.netlify/functions/admin-create-product", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer " + token
-        },
-        body: JSON.stringify({
-          name: document.getElementById("name").value,
-          slug: document.getElementById("slug").value,
-          price: parseFloat(document.getElementById("price").value),
-          currency: document.getElementById("currency").value,
-          description: document.getElementById("description").value,
-          file_path: document.getElementById("file_path").value,
-          cover_image: document.getElementById("cover_image").value,
-          dodo_product_id: document.getElementById("dodo_product_id").value
-        })
-      });
-
-      form.reset();
-      loadProducts();
-      loadProductList();
-    });
-
+    // ================= PRODUCTS =================
     async function loadProducts() {
       const res = await fetch("/.netlify/functions/admin-get-products", {
         headers: { "Authorization": "Bearer " + token }
@@ -241,9 +178,7 @@
 
         row.innerHTML = `
           <strong>${p.name}</strong>
-          <button data-id="${p.id}" style="margin-left:10px;background:#ff5c5c;color:#fff;">
-            Delete
-          </button>
+          <button data-id="${p.id}" style="margin-left:10px;background:#ff5c5c;color:#fff;">Delete</button>
         `;
 
         container.appendChild(row);
@@ -269,6 +204,7 @@
       });
     }
 
+    // ================= PLANS =================
     async function loadPlans() {
       const [productsRes, plansRes] = await Promise.all([
         fetch("/.netlify/functions/admin-get-products", {
@@ -297,9 +233,7 @@
 
           row.innerHTML = `
             ${plan.name} (${plan.installments_count} × $${plan.installment_price})
-            <button data-id="${plan.id}" style="margin-left:10px;background:#ff5c5c;color:#fff;">
-              Delete
-            </button>
+            <button data-id="${plan.id}" style="margin-left:10px;background:#ff5c5c;color:#fff;">Delete</button>
           `;
 
           block.appendChild(row);
@@ -326,19 +260,81 @@
       });
     }
 
-    loadProducts();
-    loadProductList();
-    loadPlans();
+    // ================= REQUESTS =================
+    async function loadRequests() {
+      const res = await fetch("/.netlify/functions/admin-get-installment-requests", {
+        headers: { "Authorization": "Bearer " + token }
+      });
 
-    // CREATE PLAN
-    const planForm = document.getElementById("installmentForm");
+      const data = await res.json();
+      const container = document.getElementById("requestList");
+      container.innerHTML = "";
 
-    planForm.addEventListener("submit", async (e) => {
+      data.forEach(r => {
+        const row = document.createElement("div");
+
+        row.innerHTML = `
+          <strong>${r.email}</strong> —
+          ${r.products?.name || "Unknown"} —
+          ${r.type}
+          ${r.installment_plans?.name ? " (" + r.installment_plans.name + ")" : ""}
+          <button data-id="${r.id}" style="margin-left:10px;background:#4caf50;color:#fff;">
+            Done
+          </button>
+        `;
+
+        container.appendChild(row);
+      });
+
+      document.querySelectorAll("#requestList button").forEach(btn => {
+        btn.onclick = async () => {
+          const id = btn.getAttribute("data-id");
+
+          await fetch("/.netlify/functions/admin-delete-installment-request", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer " + token
+            },
+            body: JSON.stringify({ id })
+          });
+
+          loadRequests();
+        };
+      });
+    }
+
+    // ================= CREATE =================
+    document.getElementById("productForm").addEventListener("submit", async (e) => {
       e.preventDefault();
 
-      const intervals = document.getElementById("plan_intervals").value
-        .split(",")
-        .map(n => parseInt(n.trim()));
+      await fetch("/.netlify/functions/admin-create-product", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + token
+        },
+        body: JSON.stringify({
+          name: name.value,
+          slug: slug.value,
+          price: parseFloat(price.value),
+          currency: currency.value,
+          description: description.value,
+          file_path: file_path.value,
+          cover_image: cover_image.value,
+          dodo_product_id: dodo_product_id.value
+        })
+      });
+
+      e.target.reset();
+      loadProducts();
+      loadProductList();
+    });
+
+    document.getElementById("installmentForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const intervals = plan_intervals.value.split(",").map(n => parseInt(n.trim()));
 
       await fetch("/.netlify/functions/admin-create-installment-plan", {
         method: "POST",
@@ -347,17 +343,23 @@
           "Authorization": "Bearer " + token
         },
         body: JSON.stringify({
-          product_id: document.getElementById("plan_product").value,
-          name: document.getElementById("plan_name").value,
-          installments_count: parseInt(document.getElementById("plan_count").value),
-          installment_price: parseFloat(document.getElementById("plan_price").value),
+          product_id: plan_product.value,
+          name: plan_name.value,
+          installments_count: parseInt(plan_count.value),
+          installment_price: parseFloat(plan_price.value),
           intervals
         })
       });
 
-      planForm.reset();
+      e.target.reset();
       loadPlans();
     });
+
+    // INIT
+    loadProducts();
+    loadProductList();
+    loadPlans();
+    loadRequests();
 
   } catch {
     window.location.href = "/admin/login.html";
