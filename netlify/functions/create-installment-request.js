@@ -10,7 +10,10 @@ exports.handler = async (event) => {
     const { email, product_id, plan_id, type } = JSON.parse(event.body);
 
     if (!email || !product_id || !type) {
-      return { statusCode: 400, body: "Missing fields" };
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: "Missing fields" })
+      };
     }
 
     const { error } = await supabase
@@ -19,7 +22,7 @@ exports.handler = async (event) => {
         email,
         product_id,
         plan_id: plan_id || null,
-        type // "paypal" or "installment"
+        type
       }]);
 
     if (error) throw error;
@@ -32,7 +35,7 @@ exports.handler = async (event) => {
   } catch (err) {
     return {
       statusCode: 500,
-      body: err.message
+      body: JSON.stringify({ error: err.message })
     };
   }
 };
