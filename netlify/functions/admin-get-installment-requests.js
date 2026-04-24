@@ -10,10 +10,12 @@ exports.handler = async (event) => {
     const token = event.headers.authorization?.replace("Bearer ", "");
 
     if (!token) {
-      return { statusCode: 401, body: "Unauthorized" };
+      return {
+        statusCode: 401,
+        body: JSON.stringify({ error: "Unauthorized" })
+      };
     }
 
-    // verify admin
     const { data: session } = await supabase
       .from("admin_sessions")
       .select("*")
@@ -21,19 +23,15 @@ exports.handler = async (event) => {
       .single();
 
     if (!session) {
-      return { statusCode: 401, body: "Invalid session" };
+      return {
+        statusCode: 401,
+        body: JSON.stringify({ error: "Invalid session" })
+      };
     }
 
     const { data, error } = await supabase
       .from("installment_requests")
-      .select(`
-        id,
-        email,
-        type,
-        created_at,
-        products(name),
-        installment_plans(name)
-      `)
+      .select("*")
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -46,7 +44,7 @@ exports.handler = async (event) => {
   } catch (err) {
     return {
       statusCode: 500,
-      body: err.message
+      body: JSON.stringify({ error: err.message })
     };
   }
 };
