@@ -10,12 +10,10 @@ exports.handler = async (event) => {
     const token = event.headers.authorization?.replace("Bearer ", "");
 
     if (!token) {
-      return {
-        statusCode: 401,
-        body: JSON.stringify({ error: "Unauthorized" })
-      };
+      return { statusCode: 401, body: "Unauthorized" };
     }
 
+    // ✅ VERIFY ADMIN SESSION
     const { data: session } = await supabase
       .from("admin_sessions")
       .select("*")
@@ -23,15 +21,22 @@ exports.handler = async (event) => {
       .single();
 
     if (!session) {
-      return {
-        statusCode: 401,
-        body: JSON.stringify({ error: "Invalid session" })
-      };
+      return { statusCode: 401, body: "Invalid session" };
     }
 
+    // ✅ GET REQUESTS + JOIN PRODUCT + PLAN
     const { data, error } = await supabase
       .from("installment_requests")
-      .select("*")
+      .select(`
+        id,
+        email,
+        type,
+        product_id,
+        plan_id,
+        created_at,
+        products ( name ),
+        installment_plans ( name )
+      `)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -42,9 +47,10 @@ exports.handler = async (event) => {
     };
 
   } catch (err) {
+    console.error(err);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: err.message })
+      body: "Could not fetch requests"
     };
   }
 };
