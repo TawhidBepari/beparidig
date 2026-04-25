@@ -7,7 +7,12 @@ const supabase = createClient(
 
 exports.handler = async (event) => {
   try {
-    const { email, product_id, plan_id, type } = JSON.parse(event.body);
+    const body = JSON.parse(event.body);
+
+    const email = body.email;
+    const product_id = body.product_id;
+    const plan_id = body.plan_id || null;
+    const type = body.type;
 
     if (!email || !product_id || !type) {
       return {
@@ -21,11 +26,14 @@ exports.handler = async (event) => {
       .insert([{
         email,
         product_id,
-        plan_id: plan_id || null,
+        plan_id,
         type
       }]);
 
-    if (error) throw error;
+    if (error) {
+      console.error(error);
+      throw error;
+    }
 
     return {
       statusCode: 200,
@@ -33,6 +41,7 @@ exports.handler = async (event) => {
     };
 
   } catch (err) {
+    console.error(err);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: err.message })
